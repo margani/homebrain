@@ -85,6 +85,7 @@
 			locations={data.locations}
 			{form}
 			submitLabel="Save changes"
+			pendingLabel="Updating..."
 			successMessage="Thing updated."
 		/>
 	</article>

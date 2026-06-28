@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Plus } from 'lucide-svelte';
 	import { editorText, labelFromValue } from '$lib/pocketbase/format';
 	import type { ThingFormValues } from '$lib/pocketbase/forms';
@@ -20,14 +22,19 @@
 		locations,
 		form = undefined,
 		submitLabel,
+		pendingLabel = 'Saving...',
 		successMessage = 'Saved.'
 	}: {
 		thing?: ThingRecord | null;
 		locations: LocationRecord[];
 		form?: ThingActionData | null;
 		submitLabel: string;
+		pendingLabel?: string;
 		successMessage?: string;
 	} = $props();
+
+	let isSubmitting = $state(false);
+	let isCreatingLocation = $state(false);
 
 	const initialMetadata = $derived(thing?.metadata ? JSON.stringify(thing.metadata, null, 2) : '');
 	const values = $derived({
@@ -45,9 +52,25 @@
 		new_location_path: form?.values?.new_location_path ?? '',
 		new_location_notes: form?.values?.new_location_notes ?? ''
 	});
+
+	const submitEnhance: SubmitFunction = ({ cancel, formData }) => {
+		if (isSubmitting) {
+			cancel();
+			return;
+		}
+
+		isSubmitting = true;
+		isCreatingLocation = Boolean(String(formData.get('new_location_name') ?? '').trim());
+
+		return async ({ update }) => {
+			await update();
+			isSubmitting = false;
+			isCreatingLocation = false;
+		};
+	};
 </script>
 
-<form method="POST" class="stacked-form domain-form">
+<form method="POST" class="stacked-form domain-form" use:enhance={submitEnhance}>
 	{#if form?.thingError}
 		<p class="notice error">{form.thingError}</p>
 	{:else if form?.thingSaved}
@@ -110,6 +133,9 @@
 				<textarea name="new_location_notes" rows="3">{values.new_location_notes}</textarea>
 			</label>
 		</div>
+		{#if isSubmitting && isCreatingLocation}
+			<p class="loading-note"><span class="loading-spinner" aria-hidden="true"></span>Creating location...</p>
+		{/if}
 	</details>
 
 	<div class="form-grid">
@@ -139,6 +165,13 @@
 
 	<div class="form-footer">
 		<p class="hint">Metadata is optional JSON. Notes are displayed as plain text.</p>
-		<button class="primary-action compact" type="submit">{submitLabel}</button>
+		<button class="primary-action compact" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
+			{#if isSubmitting}
+				<span class="loading-spinner light" aria-hidden="true"></span>
+				{pendingLabel}
+			{:else}
+				{submitLabel}
+			{/if}
+		</button>
 	</div>
 </form>

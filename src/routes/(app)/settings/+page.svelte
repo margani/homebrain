@@ -10,6 +10,8 @@
 	let isLoggingOut = $state(false);
 
 	async function handleLogout() {
+		if (isLoggingOut) return;
+
 		isLoggingOut = true;
 		try {
 			await logout();
@@ -71,9 +73,14 @@
 	<article class="panel">
 		<h2>Session</h2>
 		<p class="panel-copy">Google sign-in is the primary method. Email and password remains available as a fallback.</p>
-		<button class="secondary-action icon-text" type="button" onclick={handleLogout} disabled={isLoggingOut}>
-			<LogOut size={17} />
-			Logout
+		<button class="secondary-action icon-text" type="button" onclick={handleLogout} disabled={isLoggingOut} aria-busy={isLoggingOut}>
+			{#if isLoggingOut}
+				<span class="loading-spinner" aria-hidden="true"></span>
+				Logging out...
+			{:else}
+				<LogOut size={17} />
+				Logout
+			{/if}
 		</button>
 	</article>
 </section>

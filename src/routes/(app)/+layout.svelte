@@ -33,6 +33,8 @@
 	}
 
 	async function handleLogout() {
+		if (isLoggingOut) return;
+
 		isLoggingOut = true;
 
 		try {
@@ -74,8 +76,13 @@
 				</div>
 			</div>
 			<button class="ghost-action logout-action" type="button" onclick={handleLogout} disabled={isLoggingOut}>
-				<LogOut size={16} />
-				Logout
+				{#if isLoggingOut}
+					<span class="loading-spinner" aria-hidden="true"></span>
+					Logging out...
+				{:else}
+					<LogOut size={16} />
+					Logout
+				{/if}
 			</button>
 		</div>
 	</aside>
@@ -86,8 +93,20 @@
 				<span class="brand-mark small"><Brain size={21} /></span>
 				<span>HomeBrain</span>
 			</a>
-			<button class="icon-button" type="button" onclick={handleLogout} aria-label="Logout" title="Logout">
-				<LogOut size={18} />
+			<button
+				class="icon-button"
+				type="button"
+				onclick={handleLogout}
+				aria-label={isLoggingOut ? 'Logging out' : 'Logout'}
+				title={isLoggingOut ? 'Logging out' : 'Logout'}
+				disabled={isLoggingOut}
+				aria-busy={isLoggingOut}
+			>
+				{#if isLoggingOut}
+					<span class="loading-spinner" aria-hidden="true"></span>
+				{:else}
+					<LogOut size={18} />
+				{/if}
 			</button>
 		</header>
 

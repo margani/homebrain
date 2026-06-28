@@ -163,6 +163,7 @@ h2 {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: 8px;
 	min-height: 44px;
 	border: 1px solid transparent;
 	border-radius: 8px;
@@ -195,6 +196,12 @@ h2 {
 	min-width: 116px;
 }
 
+.secondary-action.compact {
+	width: auto;
+	min-width: 96px;
+	padding: 0 14px;
+}
+
 .secondary-action {
 	width: 100%;
 	padding: 0 18px;
@@ -224,6 +231,37 @@ button:disabled {
 	cursor: not-allowed;
 	opacity: 0.58;
 	transform: none;
+}
+
+.loading-spinner {
+	width: 1em;
+	height: 1em;
+	flex: 0 0 auto;
+	border: 2px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 999px;
+	animation: spin 720ms linear infinite;
+}
+
+.loading-spinner.light {
+	border-color: rgb(255 255 255 / 78%);
+	border-right-color: transparent;
+}
+
+.loading-note {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 12px 0 0;
+	color: var(--accent-strong);
+	font-size: 0.9rem;
+	font-weight: 720;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
 }
 
 .google-action {
@@ -560,6 +598,11 @@ label > select:focus,
 	flex: 0 0 auto;
 	align-items: center;
 	gap: 8px;
+}
+
+.routine-done-action {
+	min-height: 36px;
+	white-space: nowrap;
 }
 
 .record-list strong,

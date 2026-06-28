@@ -23,15 +23,46 @@
 		{ label: 'Bad', icon: Frown }
 	];
 
-	const captureEnhance: SubmitFunction = () => {
+	let captureSubmitting = $state(false);
+	let doneSubmittingId = $state<string | null>(null);
+
+	const captureEnhance: SubmitFunction = ({ cancel }) => {
+		if (captureSubmitting) {
+			cancel();
+			return;
+		}
+
+		captureSubmitting = true;
+
 		return async ({ result, update }) => {
 			await update({ reset: result.type === 'success' });
+			captureSubmitting = false;
 
 			if (result.type === 'success') {
 				await invalidateAll();
 			}
 		};
 	};
+
+	function routineDoneEnhance(routineId: string): SubmitFunction {
+		return ({ cancel }) => {
+			if (doneSubmittingId) {
+				cancel();
+				return;
+			}
+
+			doneSubmittingId = routineId;
+
+			return async ({ result, update }) => {
+				await update();
+				doneSubmittingId = null;
+
+				if (result.type === 'success') {
+					await invalidateAll();
+				}
+			};
+		};
+	}
 </script>
 
 <svelte:head>
@@ -84,7 +115,14 @@
 				{:else}
 					<p class="hint">Stored as an event note with the current time.</p>
 				{/if}
-				<button class="primary-action compact" type="submit">Save note</button>
+				<button class="primary-action compact" type="submit" disabled={captureSubmitting} aria-busy={captureSubmitting}>
+					{#if captureSubmitting}
+						<span class="loading-spinner light" aria-hidden="true"></span>
+						Saving...
+					{:else}
+						Save note
+					{/if}
+				</button>
 			</div>
 		</form>
 	</article>
@@ -112,10 +150,22 @@
 						</div>
 						<div class="routine-actions">
 							<time datetime={routine.next_due_at}>{formatDate(routine.next_due_at)}</time>
-							<form method="POST" action="?/done">
+							<form method="POST" action="?/done" use:enhance={routineDoneEnhance(routine.id)}>
 								<input type="hidden" name="routine_id" value={routine.id} />
-								<button class="icon-button" type="submit" aria-label={`Mark ${routine.name} done`} title="Done">
-									<Check size={17} />
+								<button
+									class="secondary-action compact routine-done-action"
+									type="submit"
+									disabled={Boolean(doneSubmittingId)}
+									aria-busy={doneSubmittingId === routine.id}
+									aria-label={`Mark ${routine.name} done`}
+								>
+									{#if doneSubmittingId === routine.id}
+										<span class="loading-spinner" aria-hidden="true"></span>
+										Marking done...
+									{:else}
+										<Check size={17} />
+										Done
+									{/if}
 								</button>
 							</form>
 						</div>

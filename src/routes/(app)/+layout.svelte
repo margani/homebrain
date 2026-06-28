@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import {
 		Brain,
 		House,
@@ -10,8 +10,10 @@
 		Settings,
 		Boxes
 	} from 'lucide-svelte';
+	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { displayName, initialsForUser } from '$lib/pocketbase/auth';
 	import { logout } from '$lib/pocketbase/client';
+	import { hasPendingWork } from '$lib/ui/pending';
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
@@ -25,6 +27,8 @@
 	];
 
 	let isLoggingOut = $state(false);
+	const showTopLoading = $derived($hasPendingWork || navigating.type !== null || isLoggingOut);
+	const showPageLoading = $derived(navigating.type !== null && !$hasPendingWork && !isLoggingOut);
 
 	function isActive(href: string) {
 		const pathname = page.url.pathname;
@@ -47,6 +51,9 @@
 </script>
 
 <div class="app-shell">
+	<div class:active={showTopLoading} class="top-loading-bar" aria-hidden="true"></div>
+	<PendingOverlay active={isLoggingOut} message="Logging out..." global />
+
 	<aside class="sidebar">
 		<a class="sidebar-brand" href="/today" aria-label="HomeBrain today">
 			<span class="brand-mark small"><Brain size={22} /></span>
@@ -87,7 +94,9 @@
 		</div>
 	</aside>
 
-	<div class="app-main">
+	<div class="app-main page-loading-region">
+		<PendingOverlay active={showPageLoading} message="Loading..." />
+
 		<header class="mobile-topbar">
 			<a class="mobile-brand" href="/today">
 				<span class="brand-mark small"><Brain size={21} /></span>

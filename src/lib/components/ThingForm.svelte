@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Plus } from 'lucide-svelte';
+	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { editorText, labelFromValue } from '$lib/pocketbase/format';
 	import type { ThingFormValues } from '$lib/pocketbase/forms';
 	import {
@@ -10,6 +12,7 @@
 		type LocationRecord,
 		type ThingRecord
 	} from '$lib/pocketbase/types';
+	import { beginPendingWork } from '$lib/ui/pending';
 
 	type ThingActionData = {
 		thingError?: string;
@@ -23,6 +26,8 @@
 		form = undefined,
 		submitLabel,
 		pendingLabel = 'Saving...',
+		pendingMessage = 'Saving...',
+		locationPendingMessage = 'Creating location...',
 		successMessage = 'Saved.'
 	}: {
 		thing?: ThingRecord | null;
@@ -30,11 +35,17 @@
 		form?: ThingActionData | null;
 		submitLabel: string;
 		pendingLabel?: string;
+		pendingMessage?: string;
+		locationPendingMessage?: string;
 		successMessage?: string;
 	} = $props();
 
 	let isSubmitting = $state(false);
 	let isCreatingLocation = $state(false);
+	let isOpeningThing = $state(false);
+	let showSaved = $state(false);
+	let hideServerSaved = $state(false);
+	let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const initialMetadata = $derived(thing?.metadata ? JSON.stringify(thing.metadata, null, 2) : '');
 	const values = $derived({
@@ -53,6 +64,16 @@
 		new_location_notes: form?.values?.new_location_notes ?? ''
 	});
 
+	function flashSaved() {
+		showSaved = true;
+		hideServerSaved = false;
+		if (savedTimer) clearTimeout(savedTimer);
+		savedTimer = setTimeout(() => {
+			showSaved = false;
+			hideServerSaved = true;
+		}, 2000);
+	}
+
 	const submitEnhance: SubmitFunction = ({ cancel, formData }) => {
 		if (isSubmitting) {
 			cancel();
@@ -61,19 +82,46 @@
 
 		isSubmitting = true;
 		isCreatingLocation = Boolean(String(formData.get('new_location_name') ?? '').trim());
+		isOpeningThing = false;
+		const endPendingWork = beginPendingWork();
 
-		return async ({ update }) => {
+		return async ({ result, update }) => {
+			if (result.type === 'redirect') {
+				isCreatingLocation = false;
+				isOpeningThing = true;
+
+				try {
+					await goto(result.location);
+				} finally {
+					endPendingWork();
+					isSubmitting = false;
+					isOpeningThing = false;
+				}
+				return;
+			}
+
 			await update();
+			endPendingWork();
 			isSubmitting = false;
 			isCreatingLocation = false;
+			isOpeningThing = false;
+
+			if (result.type === 'success') {
+				flashSaved();
+			}
 		};
 	};
 </script>
 
-<form method="POST" class="stacked-form domain-form" use:enhance={submitEnhance}>
+<form method="POST" class="stacked-form domain-form pending-region" use:enhance={submitEnhance}>
+	<PendingOverlay
+		active={isSubmitting}
+		message={isOpeningThing ? 'Opening thing...' : isCreatingLocation ? locationPendingMessage : pendingMessage}
+	/>
+
 	{#if form?.thingError}
 		<p class="notice error">{form.thingError}</p>
-	{:else if form?.thingSaved}
+	{:else if showSaved || (form?.thingSaved && !hideServerSaved)}
 		<p class="notice success">{successMessage}</p>
 	{/if}
 
@@ -168,7 +216,11 @@
 		<button class="primary-action compact" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
 			{#if isSubmitting}
 				<span class="loading-spinner light" aria-hidden="true"></span>
-				{pendingLabel}
+				{#if isOpeningThing}
+					Opening...
+				{:else}
+					{pendingLabel}
+				{/if}
 			{:else}
 				{submitLabel}
 			{/if}

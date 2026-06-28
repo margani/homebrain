@@ -12,7 +12,9 @@
 		ShoppingBasket,
 		Smile
 	} from 'lucide-svelte';
+	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { editorText, formatDate, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
+	import { beginPendingWork } from '$lib/ui/pending';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -25,6 +27,32 @@
 
 	let captureSubmitting = $state(false);
 	let doneSubmittingId = $state<string | null>(null);
+	let showCaptureSaved = $state(false);
+	let hideCaptureServerSaved = $state(false);
+	let hideDoneServerSaved = $state(false);
+	let doneSavedId = $state<string | null>(null);
+	let captureSavedTimer: ReturnType<typeof setTimeout> | undefined;
+	let doneSavedTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function flashCaptureSaved() {
+		showCaptureSaved = true;
+		hideCaptureServerSaved = false;
+		if (captureSavedTimer) clearTimeout(captureSavedTimer);
+		captureSavedTimer = setTimeout(() => {
+			showCaptureSaved = false;
+			hideCaptureServerSaved = true;
+		}, 2000);
+	}
+
+	function flashDone(routineId: string) {
+		doneSavedId = routineId;
+		hideDoneServerSaved = false;
+		if (doneSavedTimer) clearTimeout(doneSavedTimer);
+		doneSavedTimer = setTimeout(() => {
+			doneSavedId = null;
+			hideDoneServerSaved = true;
+		}, 2000);
+	}
 
 	const captureEnhance: SubmitFunction = ({ cancel }) => {
 		if (captureSubmitting) {
@@ -33,12 +61,15 @@
 		}
 
 		captureSubmitting = true;
+		const endPendingWork = beginPendingWork();
 
 		return async ({ result, update }) => {
 			await update({ reset: result.type === 'success' });
+			endPendingWork();
 			captureSubmitting = false;
 
 			if (result.type === 'success') {
+				flashCaptureSaved();
 				await invalidateAll();
 			}
 		};
@@ -52,12 +83,15 @@
 			}
 
 			doneSubmittingId = routineId;
+			const endPendingWork = beginPendingWork();
 
 			return async ({ result, update }) => {
 				await update();
+				endPendingWork();
 				doneSubmittingId = null;
 
 				if (result.type === 'success') {
+					flashDone(routineId);
 					await invalidateAll();
 				}
 			};
@@ -97,7 +131,8 @@
 		</div>
 	</article>
 
-	<article class="panel capture-panel">
+	<article class="panel capture-panel pending-region">
+		<PendingOverlay active={captureSubmitting} message="Saving your note..." />
 		<div class="panel-heading">
 			<div>
 				<p class="eyebrow">Capture</p>
@@ -108,8 +143,8 @@
 		<form method="POST" action="?/capture" class="capture-form" use:enhance={captureEnhance}>
 			<textarea name="text" rows="6" placeholder="First line becomes the title. Add the full note here." required></textarea>
 			<div class="form-footer">
-				{#if form?.captureSaved}
-					<p class="notice success">Saved to recent notes.</p>
+				{#if showCaptureSaved || (form?.captureSaved && !hideCaptureServerSaved)}
+					<p class="notice success">Saved</p>
 				{:else if form?.captureError}
 					<p class="notice error">{form.captureError}</p>
 				{:else}
@@ -135,18 +170,25 @@
 			</div>
 			<span class="soft-icon"><CalendarClock size={20} /></span>
 		</div>
-		{#if form?.doneSaved}
-			<p class="notice success">Routine marked done.</p>
+		{#if form?.doneSaved && !hideDoneServerSaved}
+			<p class="notice success">Done</p>
 		{:else if form?.doneError}
 			<p class="notice error">{form.doneError}</p>
 		{/if}
 		{#if data.dueSoon.length}
 			<ul class="record-list">
 				{#each data.dueSoon as routine}
-					<li>
+					<li class="pending-region">
+						<PendingOverlay active={doneSubmittingId === routine.id} message="Marking routine done..." />
 						<div>
 							<strong>{routine.name}</strong>
-							<span>{routine.expand?.thing?.name ?? 'Home routine'}</span>
+							<span>
+								{#if doneSavedId === routine.id}
+									Done
+								{:else}
+									{routine.expand?.thing?.name ?? 'Home routine'}
+								{/if}
+							</span>
 						</div>
 						<div class="routine-actions">
 							<time datetime={routine.next_due_at}>{formatDate(routine.next_due_at)}</time>

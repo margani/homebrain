@@ -18,5 +18,13 @@
 </section>
 
 <section class="panel">
-	<ThingForm locations={data.locations} {form} submitLabel="Create thing" pendingLabel="Creating..." />
+	<ThingForm
+		locations={data.locations}
+		{form}
+		submitLabel="Create thing"
+		pendingLabel="Creating..."
+		pendingMessage="Creating thing..."
+		locationPendingMessage="Creating thing and location..."
+		successMessage="Saved"
+	/>
 </section>

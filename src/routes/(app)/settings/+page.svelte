@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { LogOut, Settings } from 'lucide-svelte';
+	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { displayName, initialsForUser } from '$lib/pocketbase/auth';
 	import { logout } from '$lib/pocketbase/client';
 	import { formatDateTime } from '$lib/pocketbase/format';
+	import { beginPendingWork } from '$lib/ui/pending';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -13,10 +15,12 @@
 		if (isLoggingOut) return;
 
 		isLoggingOut = true;
+		const endPendingWork = beginPendingWork();
 		try {
 			await logout();
 			await goto('/login');
 		} finally {
+			endPendingWork();
 			isLoggingOut = false;
 		}
 	}
@@ -25,6 +29,8 @@
 <svelte:head>
 	<title>Settings - HomeBrain</title>
 </svelte:head>
+
+<PendingOverlay active={isLoggingOut} message="Logging out..." global />
 
 <section class="page-header">
 	<div>

@@ -86,7 +86,9 @@
 			{form}
 			submitLabel="Save changes"
 			pendingLabel="Updating..."
-			successMessage="Thing updated."
+			pendingMessage="Updating thing..."
+			locationPendingMessage="Updating thing and creating location..."
+			successMessage="Saved"
 		/>
 	</article>
 </section>

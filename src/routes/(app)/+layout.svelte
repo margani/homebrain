@@ -1,0 +1,108 @@
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import {
+		Brain,
+		House,
+		Inbox,
+		LogOut,
+		Search,
+		Settings,
+		Boxes
+	} from 'lucide-svelte';
+	import { displayName, initialsForUser } from '$lib/pocketbase/auth';
+	import { logout } from '$lib/pocketbase/client';
+	import type { LayoutData } from './$types';
+
+	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
+
+	const navItems = [
+		{ href: '/today', label: 'Today', icon: House },
+		{ href: '/inbox', label: 'Inbox', icon: Inbox },
+		{ href: '/things', label: 'Things', icon: Boxes },
+		{ href: '/search', label: 'Search', icon: Search },
+		{ href: '/settings', label: 'Settings', icon: Settings }
+	];
+
+	let isLoggingOut = $state(false);
+
+	function isActive(href: string) {
+		const pathname = page.url.pathname;
+		if (href === '/things') return pathname.startsWith('/things');
+		return pathname === href;
+	}
+
+	async function handleLogout() {
+		isLoggingOut = true;
+
+		try {
+			await logout();
+			await goto('/login');
+		} finally {
+			isLoggingOut = false;
+		}
+	}
+</script>
+
+<div class="app-shell">
+	<aside class="sidebar">
+		<a class="sidebar-brand" href="/today" aria-label="HomeBrain today">
+			<span class="brand-mark small"><Brain size={22} /></span>
+			<span>HomeBrain</span>
+		</a>
+
+		<nav class="sidebar-nav" aria-label="Primary">
+			{#each navItems as item}
+				{@const Icon = item.icon}
+				<a class:active={isActive(item.href)} href={item.href}>
+					<Icon size={19} />
+					<span>{item.label}</span>
+				</a>
+			{/each}
+		</nav>
+
+		<div class="sidebar-account">
+			<div class="account-card">
+				{#if data.user?.avatarUrl}
+					<img class="avatar" src={data.user.avatarUrl} alt="" />
+				{:else}
+					<div class="avatar initials">{initialsForUser(data.user)}</div>
+				{/if}
+				<div class="account-text">
+					<strong>{displayName(data.user)}</strong>
+					<span>{data.user?.email}</span>
+				</div>
+			</div>
+			<button class="ghost-action logout-action" type="button" onclick={handleLogout} disabled={isLoggingOut}>
+				<LogOut size={16} />
+				Logout
+			</button>
+		</div>
+	</aside>
+
+	<div class="app-main">
+		<header class="mobile-topbar">
+			<a class="mobile-brand" href="/today">
+				<span class="brand-mark small"><Brain size={21} /></span>
+				<span>HomeBrain</span>
+			</a>
+			<button class="icon-button" type="button" onclick={handleLogout} aria-label="Logout" title="Logout">
+				<LogOut size={18} />
+			</button>
+		</header>
+
+		<main class="content-shell">
+			{@render children()}
+		</main>
+	</div>
+
+	<nav class="bottom-nav" aria-label="Primary">
+		{#each navItems as item}
+			{@const Icon = item.icon}
+			<a class:active={isActive(item.href)} href={item.href}>
+				<Icon size={20} />
+				<span>{item.label}</span>
+			</a>
+		{/each}
+	</nav>
+</div>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+	<title>HomeBrain</title>
+	<rect width="64" height="64" rx="14" fill="#dbece1" />
+	<path d="M14 34 32 18l18 16v16a3 3 0 0 1-3 3H17a3 3 0 0 1-3-3z" fill="#fffdfa" stroke="#345f4d" stroke-width="3" stroke-linejoin="round" />
+	<path d="M24 39c0-5 3-9 8-9s8 4 8 9c0 4-3 7-8 7s-8-3-8-7z" fill="#f1edfb" stroke="#345f4d" stroke-width="3" />
+	<path d="M28 38h8M32 34v9" stroke="#345f4d" stroke-width="3" stroke-linecap="round" />
+</svg>

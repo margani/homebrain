@@ -146,3 +146,16 @@ export interface PromptRecord extends RecordModel {
 	created: string;
 	updated: string;
 }
+
+export interface PromptAnswerRecord extends RecordModel {
+	user: string;
+	prompt: string;
+	answer?: string;
+	answered_at?: string;
+	metadata?: JsonValue;
+	created: string;
+	updated: string;
+	expand?: {
+		prompt?: PromptRecord;
+	};
+}

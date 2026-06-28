@@ -4,6 +4,7 @@ import type {
 	EventRecord,
 	JsonValue,
 	LocationRecord,
+	PromptAnswerRecord,
 	PromptRecord,
 	RoutineRecord,
 	ThingRecord,
@@ -27,6 +28,22 @@ export interface LocationInput {
 	name: string;
 	path?: string;
 	notes?: string;
+}
+
+const reflectionPromptTypes = [
+	'daily_reflection',
+	'mood',
+	'task_capture',
+	'shopping',
+	'custom'
+] as const;
+
+export function localDateKey(date = new Date()) {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+
+	return `${year}-${month}-${day}`;
 }
 
 export async function listDueSoonRoutines(pb: PocketBase, limit = 6) {
@@ -184,6 +201,97 @@ export async function listActivePrompts(pb: PocketBase, limit = 8) {
 	});
 
 	return result.items;
+}
+
+export async function listReflectionPrompts(pb: PocketBase, userId: string, limit = 50) {
+	const typeFilter = reflectionPromptTypes.map((type) => `prompt_type = "${type}"`).join(' || ');
+	const result = await pb.collection('prompts').getList<PromptRecord>(1, limit, {
+		filter: pb.filter(`active = true && (${typeFilter}) && (user = {:userId} || is_system = true)`, {
+			userId
+		}),
+		sort: 'sort_order,created'
+	});
+
+	return result.items;
+}
+
+export async function listTodayPromptAnswers(pb: PocketBase, userId: string, dateKey = localDateKey()) {
+	try {
+		const result = await pb.collection('prompt_answers').getList<PromptAnswerRecord>(1, 100, {
+			filter: pb.filter('user = {:userId} && metadata.date = {:dateKey}', { userId, dateKey }),
+			sort: 'created',
+			expand: 'prompt'
+		});
+
+		return result.items;
+	} catch {
+		const result = await pb.collection('prompt_answers').getList<PromptAnswerRecord>(1, 200, {
+			filter: pb.filter('user = {:userId}', { userId }),
+			sort: '-answered_at,-created',
+			expand: 'prompt'
+		});
+
+		return result.items.filter(
+			(answer) =>
+				answer.metadata &&
+				!Array.isArray(answer.metadata) &&
+				typeof answer.metadata === 'object' &&
+				answer.metadata.date === dateKey
+		);
+	}
+}
+
+export async function upsertPromptAnswer(
+	pb: PocketBase,
+	userId: string,
+	promptId: string,
+	answer: string,
+	dateKey = localDateKey()
+) {
+	const trimmed = answer.trim();
+	const now = new Date().toISOString();
+	const payload = {
+		user: userId,
+		prompt: promptId,
+		answer: trimmed,
+		answered_at: now,
+		metadata: { date: dateKey }
+	};
+
+	let existing;
+	try {
+		existing = await pb.collection('prompt_answers').getList<PromptAnswerRecord>(1, 1, {
+			filter: pb.filter('user = {:userId} && prompt = {:promptId} && metadata.date = {:dateKey}', {
+				userId,
+				promptId,
+				dateKey
+			})
+		});
+	} catch {
+		const fallback = await pb.collection('prompt_answers').getList<PromptAnswerRecord>(1, 50, {
+			filter: pb.filter('user = {:userId} && prompt = {:promptId}', {
+				userId,
+				promptId
+			}),
+			sort: '-answered_at,-created'
+		});
+
+		existing = {
+			items: fallback.items.filter(
+				(answer) =>
+					answer.metadata &&
+					!Array.isArray(answer.metadata) &&
+					typeof answer.metadata === 'object' &&
+					answer.metadata.date === dateKey
+			)
+		};
+	}
+
+	if (existing.items[0]) {
+		return await pb.collection('prompt_answers').update<PromptAnswerRecord>(existing.items[0].id, payload);
+	}
+
+	return await pb.collection('prompt_answers').create<PromptAnswerRecord>(payload);
 }
 
 export async function searchHomeBrain(pb: PocketBase, query: string) {

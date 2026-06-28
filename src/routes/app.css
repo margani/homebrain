@@ -483,7 +483,7 @@ label {
 	left: 12px;
 	z-index: 30;
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-template-columns: repeat(6, 1fr);
 	gap: 4px;
 	padding: 8px;
 	border: 1px solid var(--line);
@@ -508,7 +508,7 @@ label {
 	justify-content: center;
 	gap: 4px;
 	border-radius: 8px;
-	font-size: 0.68rem;
+	font-size: 0.62rem;
 }
 
 .bottom-nav a.active,
@@ -894,6 +894,32 @@ label > select:focus,
 
 .inline-create[open] summary {
 	margin-bottom: 14px;
+}
+
+.reflection-panel,
+.reflection-complete {
+	max-width: 760px;
+	margin: 0 auto;
+}
+
+.reflection-form {
+	margin-top: 18px;
+}
+
+.reflection-status .notice,
+.reflection-status .hint {
+	margin: 0;
+}
+
+.reflection-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 10px;
+}
+
+.reflection-return {
+	margin-top: 18px;
 }
 
 .account-card {

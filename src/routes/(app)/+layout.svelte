@@ -6,6 +6,7 @@
 		House,
 		Inbox,
 		LogOut,
+		MessageSquareText,
 		Search,
 		Settings,
 		Boxes
@@ -22,6 +23,7 @@
 		{ href: '/today', label: 'Today', icon: House },
 		{ href: '/inbox', label: 'Inbox', icon: Inbox },
 		{ href: '/things', label: 'Things', icon: Boxes },
+		{ href: '/reflection', label: 'Reflection', icon: MessageSquareText },
 		{ href: '/search', label: 'Search', icon: Search },
 		{ href: '/settings', label: 'Settings', icon: Settings }
 	];

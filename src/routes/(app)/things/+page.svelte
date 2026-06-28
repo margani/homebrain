@@ -15,7 +15,10 @@
 		<p class="eyebrow">Things</p>
 		<h1>Home memory</h1>
 	</div>
-	<p>Inventory, routines, notes, and household things in one quiet list.</p>
+	<div class="header-actions">
+		<p>Inventory, routines, notes, and household things in one quiet list.</p>
+		<a class="primary-action compact" href="/things/new">New thing</a>
+	</div>
 </section>
 
 {#if data.things.length}

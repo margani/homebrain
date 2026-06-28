@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { Boxes } from 'lucide-svelte';
+	import ThingForm from '$lib/components/ThingForm.svelte';
 	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form?: ActionData } = $props();
 
 	const thing = $derived(data.thing);
 	const quantity = $derived(
@@ -71,4 +72,20 @@
 			<pre class="metadata-block">{metadata}</pre>
 		</article>
 	{/if}
+
+	<article class="panel wide-panel">
+		<div class="panel-heading">
+			<div>
+				<p class="eyebrow">Edit</p>
+				<h2>Update thing</h2>
+			</div>
+		</div>
+		<ThingForm
+			thing={data.thing}
+			locations={data.locations}
+			{form}
+			submitLabel="Save changes"
+			successMessage="Thing updated."
+		/>
+	</article>
 </section>

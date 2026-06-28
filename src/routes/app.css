@@ -48,6 +48,7 @@ body {
 
 button,
 input,
+select,
 textarea {
 	font: inherit;
 }
@@ -401,6 +402,18 @@ label {
 	max-width: 520px;
 }
 
+.header-actions {
+	display: grid;
+	gap: 12px;
+	justify-items: start;
+	max-width: 520px;
+}
+
+.header-actions p {
+	color: var(--muted);
+	line-height: 1.6;
+}
+
 .today-grid,
 .detail-grid,
 .split-grid,
@@ -485,7 +498,22 @@ textarea {
 	padding: 12px;
 }
 
+label > input,
+label > select {
+	width: 100%;
+	min-width: 0;
+	min-height: 46px;
+	padding: 0 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	outline: 0;
+	background: #fffefc;
+	color: var(--ink);
+}
+
 textarea:focus,
+label > input:focus,
+label > select:focus,
 .input-shell:focus-within {
 	border-color: #8fb7a3;
 	box-shadow: 0 0 0 3px rgb(143 183 163 / 22%);
@@ -525,6 +553,13 @@ textarea:focus,
 	align-items: center;
 	justify-content: space-between;
 	gap: 14px;
+}
+
+.routine-actions {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 8px;
 }
 
 .record-list strong,
@@ -686,6 +721,47 @@ textarea:focus,
 	gap: 4px;
 }
 
+.domain-form {
+	margin-top: 16px;
+}
+
+.domain-form > .notice {
+	margin-top: 0;
+}
+
+.form-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 14px;
+}
+
+.wide-field {
+	grid-column: 1 / -1;
+}
+
+.inline-create {
+	padding: 12px;
+	border: 1px solid #e8e3d9;
+	border-radius: 8px;
+	background: var(--surface-soft);
+}
+
+.inline-create summary {
+	cursor: pointer;
+	color: var(--accent-strong);
+	font-weight: 760;
+}
+
+.inline-create summary span {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.inline-create[open] summary {
+	margin-bottom: 14px;
+}
+
 .account-card {
 	display: flex;
 	align-items: center;
@@ -747,6 +823,19 @@ textarea:focus,
 @media (min-width: 700px) {
 	.search-form {
 		grid-template-columns: 1fr auto;
+	}
+
+	.form-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.form-grid > label:nth-child(1):last-child,
+	.domain-form > label {
+		grid-column: 1 / -1;
+	}
+
+	.inline-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
 	.split-grid,
@@ -836,6 +925,7 @@ textarea:focus,
 @media (max-width: 520px) {
 	.form-footer,
 	.record-list li,
+	.routine-actions,
 	.note-meta {
 		align-items: stretch;
 		flex-direction: column;

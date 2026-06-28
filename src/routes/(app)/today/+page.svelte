@@ -1,6 +1,10 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import {
 		CalendarClock,
+		Check,
 		Frown,
 		Meh,
 		Notebook,
@@ -18,6 +22,16 @@
 		{ label: 'Okay', icon: Meh },
 		{ label: 'Bad', icon: Frown }
 	];
+
+	const captureEnhance: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			await update({ reset: result.type === 'success' });
+
+			if (result.type === 'success') {
+				await invalidateAll();
+			}
+		};
+	};
 </script>
 
 <svelte:head>
@@ -60,7 +74,7 @@
 			</div>
 			<span class="soft-icon"><Plus size={20} /></span>
 		</div>
-		<form method="POST" action="?/capture" class="capture-form">
+		<form method="POST" action="?/capture" class="capture-form" use:enhance={captureEnhance}>
 			<textarea name="text" rows="6" placeholder="First line becomes the title. Add the full note here." required></textarea>
 			<div class="form-footer">
 				{#if form?.captureSaved}
@@ -83,6 +97,11 @@
 			</div>
 			<span class="soft-icon"><CalendarClock size={20} /></span>
 		</div>
+		{#if form?.doneSaved}
+			<p class="notice success">Routine marked done.</p>
+		{:else if form?.doneError}
+			<p class="notice error">{form.doneError}</p>
+		{/if}
 		{#if data.dueSoon.length}
 			<ul class="record-list">
 				{#each data.dueSoon as routine}
@@ -91,7 +110,15 @@
 							<strong>{routine.name}</strong>
 							<span>{routine.expand?.thing?.name ?? 'Home routine'}</span>
 						</div>
-						<time datetime={routine.next_due_at}>{formatDate(routine.next_due_at)}</time>
+						<div class="routine-actions">
+							<time datetime={routine.next_due_at}>{formatDate(routine.next_due_at)}</time>
+							<form method="POST" action="?/done">
+								<input type="hidden" name="routine_id" value={routine.id} />
+								<button class="icon-button" type="submit" aria-label={`Mark ${routine.name} done`} title="Done">
+									<Check size={17} />
+								</button>
+							</form>
+						</div>
 					</li>
 				{/each}
 			</ul>

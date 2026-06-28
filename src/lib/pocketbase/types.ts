@@ -19,6 +19,26 @@ export type ThingType =
 
 export type ThingStatus = 'ok' | 'low' | 'empty' | 'missing' | 'due' | 'paused' | 'unknown';
 
+export const thingTypeOptions: ThingType[] = [
+	'inventory',
+	'chore',
+	'personal_care',
+	'location_item',
+	'routine',
+	'note',
+	'other'
+];
+
+export const thingStatusOptions: ThingStatus[] = [
+	'ok',
+	'low',
+	'empty',
+	'missing',
+	'due',
+	'paused',
+	'unknown'
+];
+
 export type EventType =
 	| 'mood'
 	| 'note'

@@ -1,26 +1,16 @@
-import { error, fail } from '@sveltejs/kit';
-import { createLocation, getThing, listLocations, updateThing } from '$lib/pocketbase/data';
+import { fail, redirect } from '@sveltejs/kit';
+import { createLocation, createThing, listLocations } from '$lib/pocketbase/data';
 import { parseThingFormData } from '$lib/pocketbase/forms';
 import type { Actions } from './$types';
 
-export async function load({ locals, params }) {
-	try {
-		const [thing, locations] = await Promise.all([
-			getThing(locals.pb, params.id),
-			listLocations(locals.pb)
-		]);
-
-		return {
-			thing,
-			locations
-		};
-	} catch {
-		error(404, 'Thing not found.');
-	}
+export async function load({ locals }) {
+	return {
+		locations: await listLocations(locals.pb)
+	};
 }
 
 export const actions = {
-	default: async ({ locals, params, request }) => {
+	default: async ({ locals, request }) => {
 		if (!locals.user) {
 			return fail(401, { thingError: 'Sign in again before saving.' });
 		}
@@ -30,13 +20,14 @@ export const actions = {
 			return fail(400, { thingError: parsed.error, values: parsed.values });
 		}
 
+		let thing;
 		try {
 			if (parsed.newLocation) {
 				const location = await createLocation(locals.pb, locals.user.id, parsed.newLocation);
 				parsed.thing.location = location.id;
 			}
 
-			await updateThing(locals.pb, params.id, parsed.thing);
+			thing = await createThing(locals.pb, locals.user.id, parsed.thing);
 		} catch {
 			return fail(500, {
 				thingError: 'The thing could not be saved.',
@@ -44,6 +35,6 @@ export const actions = {
 			});
 		}
 
-		return { thingSaved: true };
+		redirect(303, `/things/${thing.id}`);
 	}
 } satisfies Actions;

@@ -30,6 +30,15 @@ export interface LocationInput {
 	notes?: string;
 }
 
+export interface RoutineInput {
+	name: string;
+	thing?: string;
+	interval_days?: number;
+	next_due_at?: string;
+	active?: boolean;
+	metadata?: JsonValue;
+}
+
 const reflectionPromptTypes = [
 	'daily_reflection',
 	'mood',
@@ -44,6 +53,25 @@ export function localDateKey(date = new Date()) {
 	const day = String(date.getDate()).padStart(2, '0');
 
 	return `${year}-${month}-${day}`;
+}
+
+function recordMetadata(record: { metadata?: JsonValue }) {
+	if (record.metadata && !Array.isArray(record.metadata) && typeof record.metadata === 'object') {
+		return record.metadata;
+	}
+
+	return {};
+}
+
+function noteEventName(event: EventRecord) {
+	return event.title || firstNonEmptyLine(event.notes ?? '') || 'Untitled capture';
+}
+
+function nextDueFromInterval(intervalDays?: number) {
+	const days = Number(intervalDays);
+	if (!Number.isFinite(days) || days <= 0) return new Date().toISOString();
+
+	return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 export async function listDueSoonRoutines(pb: PocketBase, limit = 6) {
@@ -95,6 +123,32 @@ export async function listRecentEvents(pb: PocketBase, limit = 12) {
 	return result.items;
 }
 
+export async function listUnprocessedNoteEvents(pb: PocketBase, userId: string, limit = 50) {
+	try {
+		const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+			filter: pb.filter('user = {:userId} && event_type = "note" && metadata.processed != true', {
+				userId
+			}),
+			sort: '-happened_at,-created'
+		});
+
+		return result.items;
+	} catch {
+		const result = await pb.collection('events').getList<EventRecord>(1, Math.max(limit, 100), {
+			filter: pb.filter('user = {:userId} && event_type = "note"', { userId }),
+			sort: '-happened_at,-created'
+		});
+
+		return result.items
+			.filter((event) => recordMetadata(event).processed !== true)
+			.slice(0, limit);
+	}
+}
+
+export async function countUnprocessedNoteEvents(pb: PocketBase, userId: string) {
+	return (await listUnprocessedNoteEvents(pb, userId, 100)).length;
+}
+
 export async function createQuickCaptureNote(pb: PocketBase, userId: string, text: string) {
 	const trimmed = text.trim();
 	const title = firstNonEmptyLine(trimmed) ?? 'Untitled note';
@@ -105,6 +159,24 @@ export async function createQuickCaptureNote(pb: PocketBase, userId: string, tex
 		title,
 		notes: trimmed,
 		happened_at: new Date().toISOString()
+	});
+}
+
+export async function markNoteEventProcessed(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	metadata: Record<string, JsonValue> = {}
+) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+
+	return await pb.collection('events').update<EventRecord>(eventId, {
+		metadata: {
+			...recordMetadata(event),
+			processed: true,
+			...metadata
+		}
 	});
 }
 
@@ -192,6 +264,107 @@ export async function updateThing(pb: PocketBase, id: string, input: ThingInput)
 	return await pb.collection('things').update<ThingRecord>(id, toThingPayload(null, input), {
 		expand: 'location'
 	});
+}
+
+export async function createRoutine(pb: PocketBase, userId: string, input: RoutineInput) {
+	return await pb.collection('routines').create<RoutineRecord>({
+		user: userId,
+		name: input.name,
+		thing: input.thing || '',
+		interval_days: input.interval_days ?? null,
+		next_due_at: input.next_due_at || '',
+		active: input.active ?? true,
+		metadata: input.metadata ?? null
+	});
+}
+
+export async function convertNoteEventToThing(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	type: ThingType = 'other',
+	status: ThingStatus = 'unknown'
+) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+
+	const thing = await createThing(pb, userId, {
+		name: noteEventName(event),
+		type,
+		status,
+		notes: event.notes || ''
+	});
+
+	await markNoteEventProcessed(pb, userId, eventId, {
+		converted_to: 'thing',
+		thing_id: thing.id
+	});
+
+	return thing;
+}
+
+export async function convertNoteEventToRoutine(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	intervalDays?: number
+) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+
+	const name = noteEventName(event);
+	const thing = await createThing(pb, userId, {
+		name,
+		type: 'routine',
+		status: 'unknown',
+		notes: event.notes || ''
+	});
+	const routine = await createRoutine(pb, userId, {
+		name,
+		thing: thing.id,
+		interval_days: intervalDays,
+		next_due_at: nextDueFromInterval(intervalDays),
+		active: true
+	});
+
+	await markNoteEventProcessed(pb, userId, eventId, {
+		converted_to: 'routine',
+		thing_id: thing.id,
+		routine_id: routine.id
+	});
+
+	return { thing, routine };
+}
+
+export async function convertNoteEventToShopping(pb: PocketBase, userId: string, eventId: string) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+
+	const name = noteEventName(event);
+	const existing = await pb.collection('things').getList<ThingRecord>(1, 1, {
+		filter: pb.filter('user = {:userId} && type = "inventory" && name = {:name}', { userId, name }),
+		sort: '-updated'
+	});
+	const thing = existing.items[0]
+		? await updateThing(pb, existing.items[0].id, {
+				name,
+				type: 'inventory',
+				status: 'low',
+				notes: event.notes || existing.items[0].notes || ''
+			})
+		: await createThing(pb, userId, {
+				name,
+				type: 'inventory',
+				status: 'low',
+				notes: event.notes || ''
+			});
+
+	await markNoteEventProcessed(pb, userId, eventId, {
+		converted_to: 'shopping',
+		thing_id: thing.id
+	});
+
+	return thing;
 }
 
 export async function listActivePrompts(pb: PocketBase, limit = 8) {

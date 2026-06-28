@@ -63,13 +63,16 @@
 		</a>
 
 		<nav class="sidebar-nav" aria-label="Primary">
-			{#each navItems as item}
-				{@const Icon = item.icon}
-				<a class:active={isActive(item.href)} href={item.href}>
-					<Icon size={19} />
-					<span>{item.label}</span>
-				</a>
-			{/each}
+		{#each navItems as item}
+			{@const Icon = item.icon}
+			<a class:active={isActive(item.href)} href={item.href}>
+				<Icon size={19} />
+				<span>{item.label}</span>
+				{#if item.href === '/inbox' && data.inboxCount}
+					<span class="nav-badge">{data.inboxCount}</span>
+				{/if}
+			</a>
+		{/each}
 		</nav>
 
 		<div class="sidebar-account">
@@ -132,6 +135,9 @@
 			<a class:active={isActive(item.href)} href={item.href}>
 				<Icon size={20} />
 				<span>{item.label}</span>
+				{#if item.href === '/inbox' && data.inboxCount}
+					<span class="nav-badge">{data.inboxCount}</span>
+				{/if}
 			</a>
 		{/each}
 	</nav>

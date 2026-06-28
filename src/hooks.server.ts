@@ -7,6 +7,7 @@ import type { UserRecord } from '$lib/pocketbase/types';
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.pbConfigured = isPocketBaseConfigured();
 	event.locals.pb = new PocketBase(getPocketBaseUrl());
+	event.locals.pb.autoCancellation(false);
 
 	event.locals.pb.authStore.loadFromCookie(event.request.headers.get('cookie') ?? '');
 

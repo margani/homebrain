@@ -495,6 +495,7 @@ label {
 
 .bottom-nav a,
 .sidebar-nav a {
+	position: relative;
 	display: flex;
 	align-items: center;
 	color: var(--muted);
@@ -515,6 +516,29 @@ label {
 .sidebar-nav a.active {
 	background: var(--accent-soft);
 	color: var(--accent-strong);
+}
+
+.nav-badge {
+	display: inline-grid;
+	min-width: 20px;
+	height: 20px;
+	place-items: center;
+	border-radius: 999px;
+	background: var(--surface-peach);
+	color: #7b5745;
+	font-size: 0.72rem;
+	font-weight: 820;
+	line-height: 1;
+	padding: 0 6px;
+}
+
+.bottom-nav .nav-badge {
+	position: absolute;
+	top: 4px;
+	right: 8px;
+	min-width: 17px;
+	height: 17px;
+	font-size: 0.62rem;
 }
 
 .page-header,
@@ -894,6 +918,58 @@ label > select:focus,
 
 .inline-create[open] summary {
 	margin-bottom: 14px;
+}
+
+.inbox-list {
+	display: grid;
+	gap: 14px;
+}
+
+.inbox-card {
+	display: grid;
+	gap: 16px;
+}
+
+.inbox-card-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 14px;
+}
+
+.inbox-card-header time {
+	flex: 0 0 auto;
+	color: var(--muted);
+	font-size: 0.82rem;
+	font-weight: 720;
+}
+
+.inbox-actions,
+.inbox-conversions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.inbox-convert-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 10px;
+	padding: 12px;
+	border: 1px solid #e8e3d9;
+	border-radius: 8px;
+	background: #fffefa;
+}
+
+.inbox-convert-form label {
+	min-width: 150px;
+}
+
+.empty-inbox {
+	display: flex;
+	align-items: center;
+	gap: 14px;
 }
 
 .reflection-panel,

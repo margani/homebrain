@@ -63,6 +63,38 @@ Because the app is static, the built files can also be copied to PocketHost/Pock
 
 The earlier generic PocketHost placeholder `https://YOUR-INSTANCE.pockethost.io` referred to the original backend target. Production now uses `https://db.home.whosane.dev`.
 
+## Automated PocketHost Deployments
+
+The GitHub Actions workflow at `.github/workflows/deploy.yml` deploys to PocketHost on every push to `main`. It can also be started manually with `workflow_dispatch`.
+
+The workflow:
+
+1. Checks out the repo.
+2. Sets `PUBLIC_POCKETBASE_URL=https://db.home.whosane.dev`.
+3. Runs:
+
+   ```sh
+   npm ci && npm run build
+   ```
+
+4. Installs `lftp`.
+5. Uploads the contents of `build/` to the remote `pb_public/` directory over SFTP.
+
+It uploads `build/*` contents, not the `build` folder itself.
+
+Add these repository secrets in GitHub under Settings -> Secrets and variables -> Actions:
+
+```text
+POCKETHOST_SFTP_HOST
+POCKETHOST_SFTP_USERNAME
+POCKETHOST_SFTP_PASSWORD
+POCKETHOST_SFTP_PORT
+```
+
+Use the SFTP values from PocketHost. If PocketHost does not specify a custom port, set `POCKETHOST_SFTP_PORT` to `22`.
+
+Do not commit SFTP credentials or put them in `.env`; keep them only in GitHub Actions secrets.
+
 ## PocketBase CORS
 
 Configure the PocketBase backend at `https://db.home.whosane.dev`.

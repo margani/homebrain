@@ -1,0 +1,64 @@
+name: Deploy to PocketHost
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: pockethost-pb-public
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and upload static app
+    runs-on: ubuntu-latest
+
+    env:
+      PUBLIC_POCKETBASE_URL: 'https://db.home.whosane.dev'
+      PUBLIC_REPOSITORY_URL: 'https://github.com/${{ github.repository }}'
+      PUBLIC_GIT_COMMIT: '${{ github.sha }}'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies and build
+        run: npm ci && npm run build
+
+      - name: Install SFTP client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lftp
+
+      - name: Upload build contents to PocketHost pb_public
+        env:
+          POCKETHOST_SFTP_HOST: ${{ secrets.POCKETHOST_SFTP_HOST }}
+          POCKETHOST_SFTP_USERNAME: ${{ secrets.POCKETHOST_SFTP_USERNAME }}
+          POCKETHOST_SFTP_PASSWORD: ${{ secrets.POCKETHOST_SFTP_PASSWORD }}
+          POCKETHOST_SFTP_PORT: ${{ secrets.POCKETHOST_SFTP_PORT }}
+        run: |
+          set -euo pipefail
+
+          : "${POCKETHOST_SFTP_HOST:?Missing POCKETHOST_SFTP_HOST secret}"
+          : "${POCKETHOST_SFTP_USERNAME:?Missing POCKETHOST_SFTP_USERNAME secret}"
+          : "${POCKETHOST_SFTP_PASSWORD:?Missing POCKETHOST_SFTP_PASSWORD secret}"
+          : "${POCKETHOST_SFTP_PORT:?Missing POCKETHOST_SFTP_PORT secret}"
+
+          lftp \
+            -u "$POCKETHOST_SFTP_USERNAME","$POCKETHOST_SFTP_PASSWORD" \
+            -p "$POCKETHOST_SFTP_PORT" \
+            "sftp://$POCKETHOST_SFTP_HOST" <<'LFTP'
+          set cmd:fail-exit yes
+          set net:max-retries 2
+          set net:timeout 20
+          set sftp:auto-confirm yes
+          mkdir -p pb_public
+          mirror --reverse --verbose --parallel=2 build/ pb_public/
+          bye
+          LFTP

@@ -1,7 +1,24 @@
-import { listThings } from '$lib/pocketbase/data';
+import { listUserThings } from '$lib/pocketbase/data';
+import { thingTypeOptions, type ThingType } from '$lib/pocketbase/types';
 
-export async function load({ locals }) {
+function parseType(value: string | null): ThingType | 'all' {
+	if (thingTypeOptions.includes(value as ThingType)) {
+		return value as ThingType;
+	}
+
+	return 'all';
+}
+
+function queryForType(type: ThingType | 'all') {
+	return type === 'all' ? '' : `?type=${encodeURIComponent(type)}`;
+}
+
+export async function load({ locals, url }) {
+	const selectedType = parseType(url.searchParams.get('type'));
+
 	return {
-		things: await listThings(locals.pb)
+		selectedType,
+		typeQuery: queryForType(selectedType),
+		things: locals.user ? await listUserThings(locals.pb, locals.user.id, 0) : []
 	};
 }

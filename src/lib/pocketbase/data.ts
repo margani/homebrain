@@ -554,6 +554,14 @@ export async function listThings(pb: PocketBase, limit = 50) {
 }
 
 export async function listUserThings(pb: PocketBase, userId: string, limit = 200) {
+	if (limit <= 0) {
+		return await pb.collection('things').getFullList<ThingRecord>({
+			filter: pb.filter('user = {:userId}', { userId }),
+			sort: 'name',
+			expand: 'location'
+		});
+	}
+
 	const result = await pb.collection('things').getList<ThingRecord>(1, limit, {
 		filter: pb.filter('user = {:userId}', { userId }),
 		sort: 'name',

@@ -17,11 +17,58 @@ export type ThingType =
 	| 'note'
 	| 'other';
 
-export type ThingStatus = 'ok' | 'low' | 'empty' | 'missing' | 'due' | 'paused' | 'unknown';
+export type ThingStatus =
+	| 'ok'
+	| 'low'
+	| 'empty'
+	| 'missing'
+	| 'due'
+	| 'paused'
+	| 'unknown'
+	| 'archived';
+
+export const thingTypeOptions: ThingType[] = [
+	'inventory',
+	'chore',
+	'personal_care',
+	'location_item',
+	'routine',
+	'note',
+	'other'
+];
+
+export const thingStatusOptions: ThingStatus[] = [
+	'ok',
+	'low',
+	'empty',
+	'missing',
+	'due',
+	'paused',
+	'unknown',
+	'archived'
+];
+
+export type ActivityType =
+	| 'walking'
+	| 'strength'
+	| 'cycling'
+	| 'swimming'
+	| 'stretching'
+	| 'other';
+
+export const activityTypeOptions: ActivityType[] = [
+	'walking',
+	'strength',
+	'cycling',
+	'swimming',
+	'stretching',
+	'other'
+];
 
 export type EventType =
 	| 'mood'
 	| 'note'
+	| 'activity'
 	| 'created'
 	| 'done'
 	| 'bought'
@@ -125,4 +172,17 @@ export interface PromptRecord extends RecordModel {
 	sort_order?: number;
 	created: string;
 	updated: string;
+}
+
+export interface PromptAnswerRecord extends RecordModel {
+	user: string;
+	prompt: string;
+	answer?: string;
+	answered_at?: string;
+	metadata?: JsonValue;
+	created: string;
+	updated: string;
+	expand?: {
+		prompt?: PromptRecord;
+	};
 }

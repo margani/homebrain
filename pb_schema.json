@@ -397,7 +397,7 @@
     "viewRule": "user = @request.auth.id",
     "createRule": "user = @request.auth.id",
     "updateRule": "user = @request.auth.id",
-    "deleteRule": "user = @request.auth.id",
+    "deleteRule": null,
     "name": "events",
     "type": "base",
     "fields": [
@@ -457,6 +457,7 @@
         "values": [
           "mood",
           "note",
+          "activity",
           "created",
           "done",
           "bought",
@@ -580,7 +581,7 @@
     "viewRule": "user = @request.auth.id",
     "createRule": "user = @request.auth.id",
     "updateRule": "user = @request.auth.id",
-    "deleteRule": "user = @request.auth.id",
+    "deleteRule": null,
     "name": "locations",
     "type": "base",
     "fields": [
@@ -685,7 +686,7 @@
     "viewRule": "user = @request.auth.id",
     "createRule": "user = @request.auth.id",
     "updateRule": "user = @request.auth.id",
-    "deleteRule": "user = @request.auth.id",
+    "deleteRule": null,
     "name": "prompt_answers",
     "type": "base",
     "fields": [
@@ -1076,7 +1077,7 @@
     "viewRule": "user = @request.auth.id",
     "createRule": "user = @request.auth.id",
     "updateRule": "user = @request.auth.id",
-    "deleteRule": "user = @request.auth.id",
+    "deleteRule": null,
     "name": "things",
     "type": "base",
     "fields": [
@@ -1161,7 +1162,8 @@
           "missing",
           "due",
           "paused",
-          "unknown"
+          "unknown",
+          "archived"
         ]
       },
       {

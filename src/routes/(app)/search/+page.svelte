@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { Boxes, CalendarClock, Notebook, Search } from 'lucide-svelte';
-	import { editorText, formatDate, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
+	import { Boxes, MapPin, Notebook, Search } from 'lucide-svelte';
+	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	const hasResults = $derived(
-		data.results.things.length || data.results.events.length || data.results.routines.length
+		data.results.things.length || data.results.locations.length || data.results.events.length
 	);
 </script>
 
@@ -19,7 +19,7 @@
 		<p class="eyebrow">Search</p>
 		<h1>Find home memory</h1>
 	</div>
-	<p>Search things, notes, events, and routines.</p>
+	<p>Search things, locations, notes, and events.</p>
 </section>
 
 <form class="search-form" method="GET" action="/search">
@@ -51,6 +51,26 @@
 			</article>
 		{/if}
 
+		{#if data.results.locations.length}
+			<article class="panel">
+				<div class="panel-heading">
+					<h2>Locations</h2>
+					<span class="soft-icon"><MapPin size={19} /></span>
+				</div>
+				<ul class="simple-list">
+					{#each data.results.locations as location}
+						<li>
+							<strong>{location.name}</strong>
+							<span>{location.path || 'No path set'}</span>
+							{#if editorText(location.notes)}
+								<span>{editorText(location.notes)}</span>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</article>
+		{/if}
+
 		{#if data.results.events.length}
 			<article class="panel">
 				<div class="panel-heading">
@@ -67,26 +87,6 @@
 							{#if editorText(event.notes)}
 								<p>{editorText(event.notes)}</p>
 							{/if}
-						</li>
-					{/each}
-				</ul>
-			</article>
-		{/if}
-
-		{#if data.results.routines.length}
-			<article class="panel">
-				<div class="panel-heading">
-					<h2>Routines</h2>
-					<span class="soft-icon"><CalendarClock size={19} /></span>
-				</div>
-				<ul class="record-list">
-					{#each data.results.routines as routine}
-						<li>
-							<div>
-								<strong>{routine.name}</strong>
-								<span>{routine.expand?.thing?.name ?? 'Home routine'}</span>
-							</div>
-							<time datetime={routine.next_due_at}>{formatDate(routine.next_due_at)}</time>
 						</li>
 					{/each}
 				</ul>

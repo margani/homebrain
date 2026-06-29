@@ -1,9 +1,127 @@
 <script lang="ts">
-	import { Boxes, ChevronRight } from 'lucide-svelte';
-	import { editorText, labelFromValue } from '$lib/pocketbase/format';
+	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { Boxes, ChevronRight, LayoutGrid, List, Search, X } from 'lucide-svelte';
+	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
+	import { thingStatusOptions, thingTypeOptions, type ThingStatus, type ThingType } from '$lib/pocketbase/types';
 	import type { PageData } from './$types';
 
+	type ViewMode = 'list' | 'tiles';
+	type SortMode = 'updated' | 'name' | 'type' | 'status';
+	type Thing = PageData['things'][number];
+
 	let { data }: { data: PageData } = $props();
+
+	let viewMode = $state<ViewMode>('list');
+	let viewReady = $state(false);
+	let searchTerm = $state('');
+	let statusFilter = $state<ThingStatus | 'all'>('all');
+	let locationFilter = $state('all');
+	let sortMode = $state<SortMode>('updated');
+
+	onMount(() => {
+		const saved = localStorage.getItem('homebrain.things.viewMode');
+		if (saved === 'tiles' || saved === 'list') {
+			viewMode = saved;
+		}
+		viewReady = true;
+	});
+
+	$effect(() => {
+		if (viewReady) {
+			localStorage.setItem('homebrain.things.viewMode', viewMode);
+		}
+	});
+
+	function quantitySummary(thing: Thing) {
+		const quantity = [thing.quantity_number, thing.unit]
+			.filter((part) => part !== null && part !== undefined && String(part).trim() !== '')
+			.join(' ');
+
+		return thing.quantity_text || quantity;
+	}
+
+	function locationSummary(thing: Thing) {
+		return thing.expand?.location?.name || thing.expand?.location?.path || '';
+	}
+
+	function searchText(thing: Thing) {
+		return [
+			thing.name,
+			editorText(thing.notes),
+			thing.quantity_text,
+			thing.unit,
+			locationSummary(thing),
+			thing.expand?.location?.path
+		]
+			.filter(Boolean)
+			.join(' ')
+			.toLowerCase();
+	}
+
+	function typeHref(type: ThingType | 'all') {
+		return type === 'all' ? '/things' : `/things?type=${encodeURIComponent(type)}`;
+	}
+
+	function matchesStatusScope(thing: Thing) {
+		return statusFilter === 'all' ? thing.status !== 'archived' : thing.status === statusFilter;
+	}
+
+	function typeCount(type: ThingType) {
+		return statusScopedThings.filter((thing) => thing.type === type).length;
+	}
+
+	function clearFilters() {
+		searchTerm = '';
+		statusFilter = 'all';
+		locationFilter = 'all';
+		sortMode = 'updated';
+		goto('/things', { noScroll: true, keepFocus: true });
+	}
+
+	const statusScopedThings = $derived(data.things.filter((thing) => matchesStatusScope(thing)));
+	const typeChips = $derived(thingTypeOptions.filter((type) => typeCount(type) > 0));
+	const locationOptions = $derived(
+		statusScopedThings
+			.filter((thing) => thing.expand?.location)
+			.map((thing) => thing.expand!.location!)
+			.filter((location, index, locations) => locations.findIndex((item) => item.id === location.id) === index)
+			.sort((a, b) => (a.name || a.path || '').localeCompare(b.name || b.path || ''))
+	);
+	const hasUnassignedLocation = $derived(statusScopedThings.some((thing) => !thing.location));
+	const hasAnyFilters = $derived(
+		Boolean(searchTerm.trim()) ||
+			data.selectedType !== 'all' ||
+			statusFilter !== 'all' ||
+			locationFilter !== 'all' ||
+			sortMode !== 'updated'
+	);
+	const filteredThings = $derived(
+		(() => {
+			const query = searchTerm.trim().toLowerCase();
+			const matches = data.things.filter((thing) => {
+				if (data.selectedType !== 'all' && thing.type !== data.selectedType) return false;
+				if (!matchesStatusScope(thing)) return false;
+				if (locationFilter === 'none' && thing.location) return false;
+				if (locationFilter !== 'all' && locationFilter !== 'none' && thing.location !== locationFilter) return false;
+				if (query && !searchText(thing).includes(query)) return false;
+
+				return true;
+			});
+
+			return [...matches].sort((a, b) => {
+				if (sortMode === 'name') return a.name.localeCompare(b.name);
+				if (sortMode === 'type') {
+					return `${a.type} ${a.name}`.localeCompare(`${b.type} ${b.name}`);
+				}
+				if (sortMode === 'status') {
+					return `${a.status ?? ''} ${a.name}`.localeCompare(`${b.status ?? ''} ${b.name}`);
+				}
+
+				return new Date(b.updated).getTime() - new Date(a.updated).getTime();
+			});
+		})()
+	);
 </script>
 
 <svelte:head>
@@ -15,37 +133,177 @@
 		<p class="eyebrow">Things</p>
 		<h1>Home memory</h1>
 	</div>
-	<p>Inventory, routines, notes, and household things in one quiet list.</p>
+	<div class="header-actions">
+		<p>Inventory, routines, notes, and household things in one quiet list.</p>
+		<a class="primary-action compact" href="/things/new">New thing</a>
+	</div>
 </section>
 
 {#if data.things.length}
-	<section class="thing-grid">
-		{#each data.things as thing}
-			<a class="thing-card" href={`/things/${thing.id}`}>
-				<div class="thing-card-top">
-					<span class="soft-icon"><Boxes size={19} /></span>
-					<ChevronRight size={18} />
-				</div>
-				<div>
-					<h2>{thing.name}</h2>
-					<p>{thing.expand?.location?.name ?? labelFromValue(thing.type)}</p>
-				</div>
-				<div class="tag-row">
-					<span>{labelFromValue(thing.type)}</span>
-					{#if thing.status}
-						<span>{labelFromValue(thing.status)}</span>
+	<section class="things-controls panel">
+		<div class="things-toolbar">
+			<div class="input-shell things-search">
+				<Search size={18} />
+				<input bind:value={searchTerm} type="search" placeholder="Search things, notes, quantities, locations..." autocomplete="off" />
+			</div>
+			<div class="view-toggle" aria-label="View mode">
+				<button class:active={viewMode === 'list'} type="button" onclick={() => (viewMode = 'list')} aria-pressed={viewMode === 'list'}>
+					<List size={16} />
+					List
+				</button>
+				<button class:active={viewMode === 'tiles'} type="button" onclick={() => (viewMode = 'tiles')} aria-pressed={viewMode === 'tiles'}>
+					<LayoutGrid size={16} />
+					Tiles
+				</button>
+			</div>
+		</div>
+
+		<nav class="thing-type-chip-row" aria-label="Thing type filters">
+			<a class:active={data.selectedType === 'all'} class="thing-type-chip" href={typeHref('all')}>All ({statusScopedThings.length})</a>
+			{#each typeChips as type}
+				<a class:active={data.selectedType === type} class="thing-type-chip" href={typeHref(type)}>
+					{type} ({typeCount(type)})
+				</a>
+			{/each}
+		</nav>
+
+		<div class="things-filter-grid">
+			<label>
+				Status
+				<select bind:value={statusFilter}>
+					<option value="all">All active statuses</option>
+					{#each thingStatusOptions as status}
+						<option value={status}>{labelFromValue(status)}</option>
+					{/each}
+				</select>
+			</label>
+			<label>
+				Location
+				<select bind:value={locationFilter}>
+					<option value="all">All locations</option>
+					{#if hasUnassignedLocation}
+						<option value="none">No location</option>
 					{/if}
-				</div>
-				{#if thing.quantity_text || thing.quantity_number || editorText(thing.notes)}
-					<p class="thing-summary">
-						{thing.quantity_text || [thing.quantity_number, thing.unit].filter(Boolean).join(' ') || editorText(thing.notes)}
-					</p>
-				{/if}
-			</a>
-		{/each}
+					{#each locationOptions as location}
+						<option value={location.id}>{location.name || location.path}</option>
+					{/each}
+				</select>
+			</label>
+			<label>
+				Sort
+				<select bind:value={sortMode}>
+					<option value="updated">Recently updated</option>
+					<option value="name">Name A-Z</option>
+					<option value="type">Type</option>
+					<option value="status">Status</option>
+				</select>
+			</label>
+			{#if hasAnyFilters}
+				<button class="ghost-action things-clear-action" type="button" onclick={clearFilters}>
+					<X size={16} />
+					Clear filters
+				</button>
+			{/if}
+		</div>
 	</section>
+
+	{#if filteredThings.length}
+		{#if viewMode === 'list'}
+			<section class="things-list" aria-label="Things list">
+				<div class="things-list-header" aria-hidden="true">
+					<span>Name</span>
+					<span>Type</span>
+					<span>Status</span>
+					<span>Location</span>
+					<span>Quantity</span>
+					<span>Updated</span>
+					<span></span>
+				</div>
+				{#each filteredThings as thing}
+					<article class="things-list-row">
+						<div class="things-list-name">
+							<a class="record-title-link" href={`/things/${thing.id}`}>{thing.name}</a>
+							{#if editorText(thing.notes)}
+								<p>{editorText(thing.notes)}</p>
+							{/if}
+						</div>
+						<div class="things-list-cell">
+							<span class="things-list-label">Type</span>
+							<span class="status-pill">{labelFromValue(thing.type)}</span>
+						</div>
+						<div class="things-list-cell">
+							<span class="things-list-label">Status</span>
+							{#if thing.status}
+								<span class="status-pill">{labelFromValue(thing.status)}</span>
+							{:else}
+								<span class="muted-value">Not set</span>
+							{/if}
+						</div>
+						<div class="things-list-cell">
+							<span class="things-list-label">Location</span>
+							<span>{locationSummary(thing) || 'Not set'}</span>
+						</div>
+						<div class="things-list-cell">
+							<span class="things-list-label">Quantity</span>
+							<span>{quantitySummary(thing) || 'Not set'}</span>
+						</div>
+						<div class="things-list-cell">
+							<span class="things-list-label">Updated</span>
+							<time datetime={thing.updated}>{formatDateTime(thing.updated)}</time>
+						</div>
+						<a class="icon-button things-row-open" href={`/things/${thing.id}`} aria-label={`Open ${thing.name}`}>
+							<ChevronRight size={18} />
+						</a>
+					</article>
+				{/each}
+			</section>
+		{:else}
+			<section class="thing-grid">
+				{#each filteredThings as thing}
+					<a class="thing-card" href={`/things/${thing.id}`}>
+						<div class="thing-card-top">
+							<span class="soft-icon"><Boxes size={19} /></span>
+							<ChevronRight size={18} />
+						</div>
+						<div>
+							<h2>{thing.name}</h2>
+							<p>{locationSummary(thing) || labelFromValue(thing.type)}</p>
+						</div>
+						<div class="tag-row">
+							<span>{labelFromValue(thing.type)}</span>
+							{#if thing.status}
+								<span>{labelFromValue(thing.status)}</span>
+							{/if}
+						</div>
+						{#if quantitySummary(thing) || editorText(thing.notes)}
+							<p class="thing-summary">
+								{quantitySummary(thing) || editorText(thing.notes)}
+							</p>
+						{/if}
+					</a>
+				{/each}
+			</section>
+		{/if}
+	{:else}
+		<section class="panel empty-inbox">
+			<span class="soft-icon"><Boxes size={20} /></span>
+			<div>
+				<h2>No things match these filters</h2>
+				<p class="empty-state">Try a broader search or clear the active filters.</p>
+				<button class="secondary-action compact icon-text" type="button" onclick={clearFilters}>
+					<X size={16} />
+					Clear filters
+				</button>
+			</div>
+		</section>
+	{/if}
 {:else}
-	<section class="panel">
-		<p class="empty-state">No things are saved yet.</p>
+	<section class="panel empty-inbox">
+		<span class="soft-icon"><Boxes size={20} /></span>
+		<div>
+			<h2>No things saved yet</h2>
+			<p class="empty-state">Create your first Thing to start building HomeBrain memory.</p>
+			<a class="primary-action compact icon-text" href="/things/new">New thing</a>
+		</div>
 	</section>
 {/if}

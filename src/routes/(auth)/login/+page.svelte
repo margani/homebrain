@@ -1,15 +1,30 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { Brain, Lock, Mail } from 'lucide-svelte';
-	import { loginWithGoogle, loginWithPassword } from '$lib/pocketbase/client';
-	import type { PageData } from './$types';
-
-	let { data }: { data: PageData } = $props();
+	import {
+		authReady,
+		currentUser,
+		initAuth,
+		loginWithGoogle,
+		loginWithPassword,
+		pbConfigured
+	} from '$lib/pocketbase/client';
 
 	let email = $state('');
 	let password = $state('');
 	let errorMessage = $state('');
 	let busy = $state(false);
+
+	onMount(() => {
+		initAuth();
+	});
+
+	$effect(() => {
+		if ($authReady && $currentUser) {
+			goto('/today', { replaceState: true });
+		}
+	});
 
 	async function handleGoogleLogin() {
 		errorMessage = '';
@@ -62,11 +77,11 @@
 			<p>Keep track of what matters around the house, quietly and without clutter.</p>
 		</div>
 
-		{#if !data.pbConfigured}
+		{#if !$pbConfigured}
 			<p class="notice error">Set PUBLIC_POCKETBASE_URL in your environment before signing in.</p>
 		{/if}
 
-		<button class="primary-action google-action" type="button" onclick={handleGoogleLogin} disabled={busy || !data.pbConfigured}>
+		<button class="primary-action google-action" type="button" onclick={handleGoogleLogin} disabled={busy || !$pbConfigured}>
 			<span class="google-g">G</span>
 			Continue with Google
 		</button>
@@ -96,7 +111,7 @@
 				</div>
 			</label>
 
-			<button class="secondary-action" type="submit" disabled={busy || !data.pbConfigured}>
+			<button class="secondary-action" type="submit" disabled={busy || !$pbConfigured}>
 				Sign in with email
 			</button>
 		</form>

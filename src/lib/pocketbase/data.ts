@@ -350,12 +350,16 @@ export async function convertNoteEventToShopping(pb: PocketBase, userId: string,
 				name,
 				type: 'inventory',
 				status: 'low',
-				notes: event.notes || existing.items[0].notes || ''
+				quantity_number: 0,
+				quantity_text: 'not bought yet',
+				notes: event.notes || ''
 			})
 		: await createThing(pb, userId, {
 				name,
 				type: 'inventory',
 				status: 'low',
+				quantity_number: 0,
+				quantity_text: 'not bought yet',
 				notes: event.notes || ''
 			});
 

@@ -152,11 +152,11 @@
 						</button>
 					</form>
 
-					<form method="POST" action="?/shopping" class="inbox-convert-form" use:enhance={inboxEnhance('Adding to low stock...')}>
+					<form method="POST" action="?/shopping" class="inbox-convert-form" use:enhance={inboxEnhance('Adding to buy list...')}>
 						<input type="hidden" name="event_id" value={item.id} />
 						<button class="secondary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
 							<ShoppingBasket size={16} />
-							Shopping / Low Stock
+							Add to Buy List
 						</button>
 					</form>
 				</div>

@@ -102,9 +102,9 @@ export const actions = {
 		try {
 			await convertNoteEventToShopping(locals.pb, locals.user.id, id);
 		} catch {
-			return fail(500, { inboxError: 'The item could not be converted to low stock.' });
+			return fail(500, { inboxError: 'The item could not be added to the buy list.' });
 		}
 
-		return { inboxSaved: true, eventId: id, message: 'Added to low stock' };
+		return { inboxSaved: true, eventId: id, message: 'Added to buy list' };
 	}
 } satisfies Actions;

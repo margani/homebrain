@@ -1037,39 +1037,52 @@ label > select:focus,
 	font-weight: 720;
 }
 
-.inbox-actions,
-.inbox-conversions {
-	display: flex;
-	flex-wrap: wrap;
+.inbox-triage {
+	display: grid;
+	gap: 12px;
+	padding-top: 2px;
+}
+
+.inbox-question {
+	color: var(--accent-strong);
+	font-size: 0.95rem;
+	font-weight: 780;
+}
+
+.inbox-choice-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
 	gap: 10px;
 }
 
-.inbox-convert-form {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: end;
-	gap: 10px;
+.inbox-direct-form {
+	display: contents;
+}
+
+.inbox-choice-button {
+	width: 100%;
+	min-width: 0;
+}
+
+.inbox-action-panel {
+	display: grid;
+	gap: 12px;
 	padding: 12px;
 	border: 1px solid #e8e3d9;
 	border-radius: 8px;
 	background: #fffefa;
 }
 
-.inbox-convert-form label {
-	min-width: 150px;
+.inbox-form-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 10px;
 }
 
-.activity-form {
-	flex: 1 1 520px;
-}
-
-.activity-notes-field {
-	flex: 1 1 220px;
-}
-
-.activity-notes-field textarea {
-	min-height: 46px;
-	padding-block: 10px;
+.inbox-form-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
 }
 
 .empty-inbox {
@@ -1276,13 +1289,15 @@ label > select:focus,
 	.form-footer,
 	.record-list li,
 	.routine-actions,
+	.inbox-form-actions,
 	.dashboard-pill-row,
 	.note-meta {
 		align-items: stretch;
 		flex-direction: column;
 	}
 
-	.primary-action.compact {
+	.primary-action.compact,
+	.inbox-form-actions .ghost-action {
 		width: 100%;
 	}
 

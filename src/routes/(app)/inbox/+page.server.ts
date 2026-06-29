@@ -3,9 +3,12 @@ import {
 	convertNoteEventToRoutine,
 	convertNoteEventToShopping,
 	convertNoteEventToThing,
+	linkNoteEventToThing,
 	listUnprocessedNoteEvents,
+	listUserThings,
 	logNoteEventAsActivity,
-	markNoteEventProcessed
+	markNoteEventProcessed,
+	markNoteEventReviewed
 } from '$lib/pocketbase/data';
 import {
 	activityTypeOptions,
@@ -19,7 +22,8 @@ import type { Actions } from './$types';
 
 export async function load({ locals }) {
 	return {
-		inboxItems: locals.user ? await listUnprocessedNoteEvents(locals.pb, locals.user.id) : []
+		inboxItems: locals.user ? await listUnprocessedNoteEvents(locals.pb, locals.user.id) : [],
+		things: locals.user ? await listUserThings(locals.pb, locals.user.id) : []
 	};
 }
 
@@ -54,18 +58,42 @@ export const actions = {
 		if (!id) return fail(400, { inboxError: 'Choose an inbox item first.' });
 
 		try {
-			await markNoteEventProcessed(locals.pb, locals.user.id, id, { dismissed: true });
+			await markNoteEventReviewed(locals.pb, locals.user.id, id, { dismissed: true });
 		} catch {
 			return fail(500, { inboxError: 'The item could not be dismissed.' });
 		}
 
 		return { inboxSaved: true, eventId: id, message: 'Dismissed' };
 	},
+	reviewed: async ({ locals, request }) => {
+		const id = requireEventId(await request.formData());
+		if (!locals.user) return fail(401, { inboxError: 'Sign in again before updating inbox.' });
+		if (!id) return fail(400, { inboxError: 'Choose an inbox item first.' });
+
+		try {
+			await markNoteEventReviewed(locals.pb, locals.user.id, id);
+		} catch {
+			return fail(500, { inboxError: 'The item could not be marked reviewed.' });
+		}
+
+		return { inboxSaved: true, eventId: id, message: 'Marked reviewed' };
+	},
 	thing: async ({ locals, request }) => {
 		const formData = await request.formData();
 		const id = requireEventId(formData);
-		if (!locals.user) return fail(401, { inboxError: 'Sign in again before converting.' });
+		if (!locals.user) return fail(401, { inboxError: 'Sign in again before linking.' });
 		if (!id) return fail(400, { inboxError: 'Choose an inbox item first.' });
+
+		const thingId = String(formData.get('thing_id') ?? '').trim();
+		if (thingId) {
+			try {
+				await linkNoteEventToThing(locals.pb, locals.user.id, id, thingId);
+			} catch {
+				return fail(500, { inboxError: 'The item could not be linked to that thing.' });
+			}
+
+			return { inboxSaved: true, eventId: id, message: 'Linked to thing' };
+		}
 
 		const typeValue = String(formData.get('type') ?? 'other');
 		const statusValue = String(formData.get('status') ?? 'unknown');
@@ -77,38 +105,62 @@ export const actions = {
 		try {
 			await convertNoteEventToThing(locals.pb, locals.user.id, id, type, status);
 		} catch {
-			return fail(500, { inboxError: 'The item could not be converted to a thing.' });
+			return fail(500, { inboxError: 'The item could not be saved as a thing.' });
 		}
 
-		return { inboxSaved: true, eventId: id, message: 'Converted to thing' };
+		return { inboxSaved: true, eventId: id, message: 'Saved as thing' };
 	},
 	routine: async ({ locals, request }) => {
 		const formData = await request.formData();
 		const id = requireEventId(formData);
-		if (!locals.user) return fail(401, { inboxError: 'Sign in again before converting.' });
+		if (!locals.user) return fail(401, { inboxError: 'Sign in again before creating a routine.' });
 		if (!id) return fail(400, { inboxError: 'Choose an inbox item first.' });
+
+		const routineName = String(formData.get('routine_name') ?? '').trim();
+		if (formData.has('routine_name') && !routineName) {
+			return fail(400, { inboxError: 'Routine name is required.', eventId: id });
+		}
 
 		const intervalValue = String(formData.get('interval_days') ?? '').trim();
 		const intervalDays = intervalValue ? Number(intervalValue) : undefined;
+		if (formData.has('interval_days') && !intervalValue) {
+			return fail(400, { inboxError: 'Interval days is required.', eventId: id });
+		}
 		if (intervalValue && (!Number.isInteger(intervalDays) || Number(intervalDays) <= 0)) {
 			return fail(400, { inboxError: 'Interval days must be a positive whole number.', eventId: id });
 		}
 
 		try {
-			await convertNoteEventToRoutine(locals.pb, locals.user.id, id, intervalDays);
+			await convertNoteEventToRoutine(
+				locals.pb,
+				locals.user.id,
+				id,
+				intervalDays,
+				routineName || undefined
+			);
 		} catch {
-			return fail(500, { inboxError: 'The item could not be converted to a routine.' });
+			return fail(500, { inboxError: 'The routine could not be created.' });
 		}
 
-		return { inboxSaved: true, eventId: id, message: 'Converted to routine' };
+		return { inboxSaved: true, eventId: id, message: 'Created routine' };
 	},
 	shopping: async ({ locals, request }) => {
-		const id = requireEventId(await request.formData());
-		if (!locals.user) return fail(401, { inboxError: 'Sign in again before converting.' });
+		const formData = await request.formData();
+		const id = requireEventId(formData);
+		if (!locals.user) return fail(401, { inboxError: 'Sign in again before adding to the buy list.' });
 		if (!id) return fail(400, { inboxError: 'Choose an inbox item first.' });
 
+		const itemName = String(formData.get('item_name') ?? '').trim();
+		if (formData.has('item_name') && !itemName) {
+			return fail(400, { inboxError: 'Item name is required.', eventId: id });
+		}
+		const quantityText = String(formData.get('quantity_text') ?? '').trim();
+
 		try {
-			await convertNoteEventToShopping(locals.pb, locals.user.id, id);
+			await convertNoteEventToShopping(locals.pb, locals.user.id, id, {
+				...(itemName ? { name: itemName } : {}),
+				...(quantityText ? { quantity_text: quantityText } : {})
+			});
 		} catch {
 			return fail(500, { inboxError: 'The item could not be added to the buy list.' });
 		}

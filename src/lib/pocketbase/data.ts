@@ -46,6 +46,11 @@ export interface ActivityLogInput {
 	notes?: string;
 }
 
+export interface ShoppingConversionInput {
+	name?: string;
+	quantity_text?: string;
+}
+
 export interface ActiveThingSummary {
 	id: string;
 	name: string;
@@ -183,9 +188,10 @@ export async function listRecentEvents(pb: PocketBase, limit = 12) {
 export async function listUnprocessedNoteEvents(pb: PocketBase, userId: string, limit = 50) {
 	try {
 		const result = await pb.collection('events').getList<EventRecord>(1, limit, {
-			filter: pb.filter('user = {:userId} && event_type = "note" && metadata.processed != true', {
-				userId
-			}),
+			filter: pb.filter(
+				'user = {:userId} && event_type = "note" && metadata.reviewed != true && metadata.processed != true',
+				{ userId }
+			),
 			sort: '-happened_at,-created'
 		});
 
@@ -197,7 +203,10 @@ export async function listUnprocessedNoteEvents(pb: PocketBase, userId: string, 
 		});
 
 		return result.items
-			.filter((event) => recordMetadata(event).processed !== true)
+			.filter((event) => {
+				const metadata = recordMetadata(event);
+				return metadata.reviewed !== true && metadata.processed !== true;
+			})
 			.slice(0, limit);
 	}
 }
@@ -354,6 +363,24 @@ export async function markNoteEventProcessed(
 	});
 }
 
+export async function markNoteEventReviewed(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	metadata: Record<string, JsonValue> = {}
+) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+
+	return await pb.collection('events').update<EventRecord>(eventId, {
+		metadata: {
+			...recordMetadata(event),
+			reviewed: true,
+			...metadata
+		}
+	});
+}
+
 export async function logNoteEventAsActivity(
 	pb: PocketBase,
 	userId: string,
@@ -412,6 +439,16 @@ export async function completeRoutine(pb: PocketBase, userId: string, routineId:
 
 export async function listThings(pb: PocketBase, limit = 50) {
 	const result = await pb.collection('things').getList<ThingRecord>(1, limit, {
+		sort: 'name',
+		expand: 'location'
+	});
+
+	return result.items;
+}
+
+export async function listUserThings(pb: PocketBase, userId: string, limit = 200) {
+	const result = await pb.collection('things').getList<ThingRecord>(1, limit, {
+		filter: pb.filter('user = {:userId}', { userId }),
 		sort: 'name',
 		expand: 'location'
 	});
@@ -479,6 +516,31 @@ export async function createRoutine(pb: PocketBase, userId: string, input: Routi
 	});
 }
 
+export async function linkNoteEventToThing(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	thingId: string
+) {
+	const [event, thing] = await Promise.all([
+		pb.collection('events').getOne<EventRecord>(eventId),
+		pb.collection('things').getOne<ThingRecord>(thingId)
+	]);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+	if (event.event_type !== 'note') throw new Error('Only note events can be linked from inbox.');
+	if (thing.user !== userId) throw new Error('Thing does not belong to the current user.');
+
+	return await pb.collection('events').update<EventRecord>(eventId, {
+		thing: thingId,
+		metadata: {
+			...recordMetadata(event),
+			reviewed: true,
+			linked_to: 'thing',
+			thing_id: thingId
+		}
+	});
+}
+
 export async function convertNoteEventToThing(
 	pb: PocketBase,
 	userId: string,
@@ -508,12 +570,13 @@ export async function convertNoteEventToRoutine(
 	pb: PocketBase,
 	userId: string,
 	eventId: string,
-	intervalDays?: number
+	intervalDays?: number,
+	nameOverride?: string
 ) {
 	const event = await pb.collection('events').getOne<EventRecord>(eventId);
 	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
 
-	const name = noteEventName(event);
+	const name = nameOverride?.trim() || noteEventName(event);
 	const thing = await createThing(pb, userId, {
 		name,
 		type: 'routine',
@@ -537,11 +600,17 @@ export async function convertNoteEventToRoutine(
 	return { thing, routine };
 }
 
-export async function convertNoteEventToShopping(pb: PocketBase, userId: string, eventId: string) {
+export async function convertNoteEventToShopping(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	input: ShoppingConversionInput = {}
+) {
 	const event = await pb.collection('events').getOne<EventRecord>(eventId);
 	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
 
-	const name = noteEventName(event);
+	const name = input.name?.trim() || noteEventName(event);
+	const quantityText = input.quantity_text?.trim() || 'not bought yet';
 	const existing = await pb.collection('things').getList<ThingRecord>(1, 1, {
 		filter: pb.filter('user = {:userId} && type = "inventory" && name = {:name}', { userId, name }),
 		sort: '-updated'
@@ -552,7 +621,7 @@ export async function convertNoteEventToShopping(pb: PocketBase, userId: string,
 				type: 'inventory',
 				status: 'low',
 				quantity_number: 0,
-				quantity_text: 'not bought yet',
+				quantity_text: quantityText,
 				notes: event.notes || ''
 			})
 		: await createThing(pb, userId, {
@@ -560,7 +629,7 @@ export async function convertNoteEventToShopping(pb: PocketBase, userId: string,
 				type: 'inventory',
 				status: 'low',
 				quantity_number: 0,
-				quantity_text: 'not bought yet',
+				quantity_text: quantityText,
 				notes: event.notes || ''
 			});
 

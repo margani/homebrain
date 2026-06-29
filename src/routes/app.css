@@ -445,6 +445,23 @@ label {
 	min-height: 100vh;
 }
 
+.app-version-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 6px 14px;
+	padding: 10px 16px 18px;
+	color: var(--soft);
+	font-size: 0.72rem;
+	line-height: 1.45;
+}
+
+.app-version-footer a {
+	color: var(--muted);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
 .sidebar {
 	display: none;
 }

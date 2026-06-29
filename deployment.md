@@ -35,15 +35,23 @@ Use Cloudflare Pages as the primary deployment target.
    PUBLIC_POCKETBASE_URL=https://db.home.whosane.dev
    ```
 
-7. Add the production custom domain:
+7. Optionally add the repository URL so the footer version hash links to GitHub:
+
+   ```text
+   PUBLIC_REPOSITORY_URL=https://github.com/margani/homebrain
+   ```
+
+   `PUBLIC_GIT_COMMIT` and `PUBLIC_BUILD_TIME` are populated automatically during `npm run build`. Cloudflare Pages provides the commit SHA as `CF_PAGES_COMMIT_SHA`; local builds fall back to git.
+
+8. Add the production custom domain:
 
    ```text
    home.whosane.dev
    ```
 
-8. Deploy from the connected GitHub repo.
+9. Deploy from the connected GitHub repo.
 
-After deployment, visit `https://home.whosane.dev` and confirm login, quick capture, inbox conversion, thing editing, search, and reflection saves still use the SvelteKit SSR/server-action flow.
+After deployment, visit `https://home.whosane.dev` and confirm login, quick capture, inbox conversion, thing editing, search, reflection saves, and the footer version display still use the SvelteKit SSR/server-action flow.
 
 ## PocketBase And PocketHost
 

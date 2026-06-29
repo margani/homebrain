@@ -52,7 +52,9 @@ jobs:
           echo "DEPLOY_DIR=$deploy_dir" >> "$GITHUB_ENV"
 
       - name: Install phio CLI
-        run: npm install -g phio
+        run: |
+          npm install -g tsx phio
+          phio --help
 
       - name: Deploy with phio
         env:

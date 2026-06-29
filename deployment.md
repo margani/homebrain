@@ -24,7 +24,7 @@ The workflow:
 4. Runs `npm run check`.
 5. Runs `npm run build`.
 6. Copies the contents of `build/` into a temporary deploy directory containing only `pb_public/`.
-7. Installs the `phio` CLI.
+7. Installs the `phio` CLI and the `tsx` runner required by the current phio package.
 8. Runs `phio deploy` against the PocketHost instance from `PHIO_INSTANCE`.
 
 The workflow stages `build/*` contents into `pb_public/`, then runs `phio deploy` from that temporary deploy directory. The deployed PocketHost folder contains the app files directly rather than a nested `build` directory.

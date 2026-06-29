@@ -1162,7 +1162,8 @@
           "missing",
           "due",
           "paused",
-          "unknown"
+          "unknown",
+          "archived"
         ]
       },
       {

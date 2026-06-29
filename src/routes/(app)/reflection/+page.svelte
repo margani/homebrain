@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { ArrowLeft, ArrowRight, Check, SkipForward } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
@@ -14,6 +13,7 @@
 	let draftAnswer = $state('');
 	let isSaving = $state(false);
 	let isComplete = $state(false);
+	let answerOverrides = $state<Record<string, string>>({});
 	let showSaved = $state(false);
 	let hideServerSaved = $state(false);
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -22,7 +22,10 @@
 	const prompts = $derived(data.prompts);
 	const currentPrompt = $derived(prompts[index]);
 	const answersByPrompt = $derived(
-		new Map(data.answers.map((answer) => [answer.prompt, editorText(answer.answer)]))
+		new Map([
+			...data.answers.map((answer) => [answer.prompt, editorText(answer.answer)] as const),
+			...Object.entries(answerOverrides)
+		])
 	);
 	const answeredPrompts = $derived(
 		prompts.filter((prompt) => Boolean((answersByPrompt.get(prompt.id) ?? '').trim()))
@@ -69,23 +72,25 @@
 		index += 1;
 	}
 
-	const saveEnhance: SubmitFunction = ({ cancel }) => {
+	const saveEnhance: SubmitFunction = ({ cancel, formData }) => {
 		if (isSaving) {
 			cancel();
 			return;
 		}
 
+		const promptId = String(formData.get('prompt') ?? '').trim();
+		const answer = String(formData.get('answer') ?? '').trim();
 		isSaving = true;
 		const endPendingWork = beginPendingWork();
 
 		return async ({ result, update }) => {
-			await update({ reset: false });
+			await update({ reset: false, invalidateAll: false });
 			endPendingWork();
 			isSaving = false;
 
 			if (result.type === 'success') {
+				answerOverrides = { ...answerOverrides, [promptId]: answer };
 				flashSaved();
-				await invalidateAll();
 
 				if (isLastQuestion) {
 					isComplete = true;

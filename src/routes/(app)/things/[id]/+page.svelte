@@ -7,7 +7,21 @@
 
 	let { data, form }: { data: PageData; form?: ActionData } = $props();
 
-	const thing = $derived(data.thing);
+	type ThingActionResult = ActionData & {
+		thing?: PageData['thing'];
+		location?: PageData['locations'][number];
+	};
+
+	let localThing = $state<PageData['thing'] | null>(null);
+	let localLocations = $state<PageData['locations']>([]);
+
+	const actionResult = $derived(form as ThingActionResult | undefined);
+	const thing = $derived(localThing?.id === data.thing.id ? localThing : data.thing);
+	const locations = $derived(
+		[...localLocations, ...data.locations]
+			.filter((location, index, items) => items.findIndex((item) => item.id === location.id) === index)
+			.sort((a, b) => (a.path || a.name || '').localeCompare(b.path || b.name || ''))
+	);
 	const quantity = $derived(
 		thing.quantity_text || [thing.quantity_number, thing.unit].filter(Boolean).join(' ')
 	);
@@ -41,6 +55,19 @@
 
 		return '';
 	}
+
+	$effect(() => {
+		if (actionResult?.thingSaved && actionResult.thing) {
+			localThing = actionResult.thing;
+		}
+
+		if (actionResult?.location) {
+			localLocations = [
+				actionResult.location,
+				...locations.filter((location) => location.id !== actionResult.location?.id)
+			].sort((a, b) => (a.path || a.name || '').localeCompare(b.path || b.name || ''));
+		}
+	});
 </script>
 
 <svelte:head>
@@ -147,8 +174,8 @@
 			</div>
 		</div>
 		<ThingForm
-			thing={data.thing}
-			locations={data.locations}
+			thing={thing}
+			locations={locations}
 			{form}
 			submitLabel="Save changes"
 			pendingLabel="Updating..."

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
+	import { invalidate } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import {
 		CalendarClock,
@@ -13,11 +13,20 @@
 		Smile
 	} from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
-	import { editorText, formatDate, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
+	import {
+		editorText,
+		firstNonEmptyLine,
+		formatDate,
+		formatDateTime,
+		labelFromValue
+	} from '$lib/pocketbase/format';
 	import { beginPendingWork } from '$lib/ui/pending';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form?: ActionData } = $props();
+
+	type RecentNote = PageData['recentNotes'][number];
+	type CaptureResultData = { captureSaved?: boolean; note?: RecentNote };
 
 	const moodOptions = [
 		{ label: 'Good', icon: Smile },
@@ -26,13 +35,25 @@
 	];
 
 	let captureSubmitting = $state(false);
+	let captureText = $state('');
 	let doneSubmittingId = $state<string | null>(null);
+	let hiddenDoneRoutineIds = $state<string[]>([]);
+	let pendingRecentNotes = $state<RecentNote[]>([]);
 	let showCaptureSaved = $state(false);
 	let hideCaptureServerSaved = $state(false);
 	let hideDoneServerSaved = $state(false);
 	let doneSavedId = $state<string | null>(null);
 	let captureSavedTimer: ReturnType<typeof setTimeout> | undefined;
 	let doneSavedTimer: ReturnType<typeof setTimeout> | undefined;
+
+	const dueSoon = $derived(
+		data.dueSoon.filter((routine) => !hiddenDoneRoutineIds.includes(routine.id))
+	);
+	const recentNotes = $derived(
+		[...pendingRecentNotes, ...data.recentNotes]
+			.filter((note, index, notes) => notes.findIndex((item) => item.id === note.id) === index)
+			.slice(0, 6)
+	);
 
 	function flashCaptureSaved() {
 		showCaptureSaved = true;
@@ -54,23 +75,53 @@
 		}, 2000);
 	}
 
-	const captureEnhance: SubmitFunction = ({ cancel }) => {
+	function optimisticNote(text: string): RecentNote {
+		const now = new Date().toISOString();
+
+		return {
+			id: `pending-${Date.now()}`,
+			collectionId: 'events',
+			collectionName: 'events',
+			user: data.user?.id ?? '',
+			event_type: 'note',
+			title: firstNonEmptyLine(text) ?? 'Untitled note',
+			notes: text,
+			happened_at: now,
+			created: now,
+			updated: now
+		};
+	}
+
+	const captureEnhance: SubmitFunction = ({ cancel, formData }) => {
 		if (captureSubmitting) {
 			cancel();
 			return;
 		}
 
+		const text = String(formData.get('text') ?? '').trim();
+		const pendingNote = optimisticNote(text);
 		captureSubmitting = true;
+		captureText = '';
+		pendingRecentNotes = [pendingNote, ...pendingRecentNotes].slice(0, 6);
 		const endPendingWork = beginPendingWork();
 
 		return async ({ result, update }) => {
-			await update({ reset: result.type === 'success' });
+			await update({ reset: false, invalidateAll: false });
 			endPendingWork();
 			captureSubmitting = false;
 
 			if (result.type === 'success') {
+				const savedNote = (result.data as CaptureResultData | undefined)?.note;
+				if (savedNote) {
+					pendingRecentNotes = pendingRecentNotes.map((note) =>
+						note.id === pendingNote.id ? savedNote : note
+					);
+				}
 				flashCaptureSaved();
-				await invalidateAll();
+				await invalidate('homebrain:inbox-count');
+			} else {
+				pendingRecentNotes = pendingRecentNotes.filter((note) => note.id !== pendingNote.id);
+				captureText = text;
 			}
 		};
 	};
@@ -83,16 +134,18 @@
 			}
 
 			doneSubmittingId = routineId;
+			hiddenDoneRoutineIds = [...hiddenDoneRoutineIds, routineId];
 			const endPendingWork = beginPendingWork();
 
 			return async ({ result, update }) => {
-				await update();
+				await update({ invalidateAll: false });
 				endPendingWork();
 				doneSubmittingId = null;
 
 				if (result.type === 'success') {
 					flashDone(routineId);
-					await invalidateAll();
+				} else {
+					hiddenDoneRoutineIds = hiddenDoneRoutineIds.filter((id) => id !== routineId);
 				}
 			};
 		};
@@ -141,7 +194,13 @@
 			<span class="soft-icon"><Plus size={20} /></span>
 		</div>
 		<form method="POST" action="?/capture" class="capture-form" use:enhance={captureEnhance}>
-			<textarea name="text" rows="6" placeholder="First line becomes the title. Add the full note here." required></textarea>
+			<textarea
+				name="text"
+				rows="6"
+				bind:value={captureText}
+				placeholder="First line becomes the title. Add the full note here."
+				required
+			></textarea>
 			<div class="form-footer">
 				{#if showCaptureSaved || (form?.captureSaved && !hideCaptureServerSaved)}
 					<p class="notice success">Saved</p>
@@ -175,9 +234,9 @@
 		{:else if form?.doneError}
 			<p class="notice error">{form.doneError}</p>
 		{/if}
-		{#if data.dueSoon.length}
+		{#if dueSoon.length}
 			<ul class="record-list">
-				{#each data.dueSoon as routine}
+				{#each dueSoon as routine}
 					<li class="pending-region">
 						<PendingOverlay active={doneSubmittingId === routine.id} message="Marking routine done..." />
 						<div>
@@ -254,9 +313,9 @@
 			</div>
 			<span class="soft-icon"><Notebook size={20} /></span>
 		</div>
-		{#if data.recentNotes.length}
+		{#if recentNotes.length}
 			<ul class="note-list">
-				{#each data.recentNotes as note}
+				{#each recentNotes as note}
 					<li>
 						<div class="note-meta">
 							<strong>{note.title || 'Untitled note'}</strong>

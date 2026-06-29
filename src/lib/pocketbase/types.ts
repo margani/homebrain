@@ -17,7 +17,15 @@ export type ThingType =
 	| 'note'
 	| 'other';
 
-export type ThingStatus = 'ok' | 'low' | 'empty' | 'missing' | 'due' | 'paused' | 'unknown';
+export type ThingStatus =
+	| 'ok'
+	| 'low'
+	| 'empty'
+	| 'missing'
+	| 'due'
+	| 'paused'
+	| 'unknown'
+	| 'archived';
 
 export const thingTypeOptions: ThingType[] = [
 	'inventory',
@@ -36,7 +44,8 @@ export const thingStatusOptions: ThingStatus[] = [
 	'missing',
 	'due',
 	'paused',
-	'unknown'
+	'unknown',
+	'archived'
 ];
 
 export type ActivityType =

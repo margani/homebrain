@@ -100,7 +100,7 @@
 				return;
 			}
 
-			await update();
+			await update({ reset: false, invalidateAll: false });
 			endPendingWork();
 			isSubmitting = false;
 			isCreatingLocation = false;

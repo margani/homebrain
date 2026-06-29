@@ -63,8 +63,12 @@
 		return type === 'all' ? '/things' : `/things?type=${encodeURIComponent(type)}`;
 	}
 
+	function matchesStatusScope(thing: Thing) {
+		return statusFilter === 'all' ? thing.status !== 'archived' : thing.status === statusFilter;
+	}
+
 	function typeCount(type: ThingType) {
-		return data.things.filter((thing) => thing.type === type).length;
+		return statusScopedThings.filter((thing) => thing.type === type).length;
 	}
 
 	function clearFilters() {
@@ -75,15 +79,16 @@
 		goto('/things', { noScroll: true, keepFocus: true });
 	}
 
+	const statusScopedThings = $derived(data.things.filter((thing) => matchesStatusScope(thing)));
 	const typeChips = $derived(thingTypeOptions.filter((type) => typeCount(type) > 0));
 	const locationOptions = $derived(
-		data.things
+		statusScopedThings
 			.filter((thing) => thing.expand?.location)
 			.map((thing) => thing.expand!.location!)
 			.filter((location, index, locations) => locations.findIndex((item) => item.id === location.id) === index)
 			.sort((a, b) => (a.name || a.path || '').localeCompare(b.name || b.path || ''))
 	);
-	const hasUnassignedLocation = $derived(data.things.some((thing) => !thing.location));
+	const hasUnassignedLocation = $derived(statusScopedThings.some((thing) => !thing.location));
 	const hasAnyFilters = $derived(
 		Boolean(searchTerm.trim()) ||
 			data.selectedType !== 'all' ||
@@ -96,7 +101,7 @@
 			const query = searchTerm.trim().toLowerCase();
 			const matches = data.things.filter((thing) => {
 				if (data.selectedType !== 'all' && thing.type !== data.selectedType) return false;
-				if (statusFilter !== 'all' && thing.status !== statusFilter) return false;
+				if (!matchesStatusScope(thing)) return false;
 				if (locationFilter === 'none' && thing.location) return false;
 				if (locationFilter !== 'all' && locationFilter !== 'none' && thing.location !== locationFilter) return false;
 				if (query && !searchText(thing).includes(query)) return false;
@@ -154,7 +159,7 @@
 		</div>
 
 		<nav class="thing-type-chip-row" aria-label="Thing type filters">
-			<a class:active={data.selectedType === 'all'} class="thing-type-chip" href={typeHref('all')}>All ({data.things.length})</a>
+			<a class:active={data.selectedType === 'all'} class="thing-type-chip" href={typeHref('all')}>All ({statusScopedThings.length})</a>
 			{#each typeChips as type}
 				<a class:active={data.selectedType === type} class="thing-type-chip" href={typeHref(type)}>
 					{type} ({typeCount(type)})
@@ -166,7 +171,7 @@
 			<label>
 				Status
 				<select bind:value={statusFilter}>
-					<option value="all">All statuses</option>
+					<option value="all">All active statuses</option>
 					{#each thingStatusOptions as status}
 						<option value={status}>{labelFromValue(status)}</option>
 					{/each}

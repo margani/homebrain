@@ -5,6 +5,7 @@ import {
 	localDateKey,
 	upsertPromptAnswer
 } from '$lib/pocketbase/data';
+import { timeAction } from '$lib/server/timing';
 import type { Actions } from './$types';
 
 export async function load({ locals }) {
@@ -32,26 +33,27 @@ export async function load({ locals }) {
 }
 
 export const actions = {
-	save: async ({ locals, request }) => {
-		if (!locals.user) {
-			return fail(401, { reflectionError: 'Sign in again before saving.' });
-		}
+	save: async ({ locals, request }) =>
+		timeAction('reflection.save', async () => {
+			if (!locals.user) {
+				return fail(401, { reflectionError: 'Sign in again before saving.' });
+			}
 
-		const formData = await request.formData();
-		const promptId = String(formData.get('prompt') ?? '').trim();
-		const answer = String(formData.get('answer') ?? '');
-		const dateKey = String(formData.get('date') ?? localDateKey()).trim() || localDateKey();
+			const formData = await request.formData();
+			const promptId = String(formData.get('prompt') ?? '').trim();
+			const answer = String(formData.get('answer') ?? '');
+			const dateKey = String(formData.get('date') ?? localDateKey()).trim() || localDateKey();
 
-		if (!promptId) {
-			return fail(400, { reflectionError: 'Choose a question before saving.' });
-		}
+			if (!promptId) {
+				return fail(400, { reflectionError: 'Choose a question before saving.' });
+			}
 
-		try {
-			await upsertPromptAnswer(locals.pb, locals.user.id, promptId, answer, dateKey);
-		} catch {
-			return fail(500, { reflectionError: 'The answer could not be saved.' });
-		}
+			try {
+				await upsertPromptAnswer(locals.pb, locals.user.id, promptId, answer, dateKey);
+			} catch {
+				return fail(500, { reflectionError: 'The answer could not be saved.' });
+			}
 
-		return { reflectionSaved: true, promptId };
-	}
+			return { reflectionSaved: true, promptId, answer, dateKey };
+		})
 } satisfies Actions;

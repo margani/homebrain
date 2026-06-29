@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
+	import { invalidate } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Activity, Archive, Boxes, Check, Repeat, ShoppingBasket, X } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
@@ -10,9 +10,9 @@
 	import type { ActionData, PageData } from './$types';
 
 	type InboxAction = 'activity' | 'shopping' | 'thing' | 'routine';
-
 	let { data, form }: { data: PageData; form?: ActionData } = $props();
 
+	let removedInboxItemIds = $state<string[]>([]);
 	let activeItemId = $state<string | null>(null);
 	let activeAction = $state<InboxAction | null>(null);
 	let pendingItemId = $state<string | null>(null);
@@ -21,6 +21,10 @@
 	let hideServerSaved = $state(false);
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
 	let thingSearch = $state('');
+
+	const inboxItems = $derived(
+		data.inboxItems.filter((item) => !removedInboxItemIds.includes(item.id))
+	);
 
 	function titleFor(event: PageData['inboxItems'][number]) {
 		return event.title || firstNonEmptyLine(editorText(event.notes)) || 'Untitled capture';
@@ -86,15 +90,16 @@
 			const endPendingWork = beginPendingWork();
 
 			return async ({ result, update }) => {
-				await update();
+				await update({ invalidateAll: false });
 				endPendingWork();
 				const finishedItemId = pendingItemId;
 				pendingItemId = null;
 
 				if (result.type === 'success' && finishedItemId) {
 					cancelAction();
+					removedInboxItemIds = [...removedInboxItemIds, finishedItemId];
 					flashSaved(finishedItemId);
-					await invalidateAll();
+					await invalidate('homebrain:inbox-count');
 				}
 			};
 		};
@@ -119,9 +124,9 @@
 	</section>
 {/if}
 
-{#if data.inboxItems.length}
+{#if inboxItems.length}
 	<section class="inbox-list">
-		{#each data.inboxItems as item}
+		{#each inboxItems as item}
 			<article class="panel inbox-card pending-region">
 				<PendingOverlay active={pendingItemId === item.id} message={pendingMessage} />
 

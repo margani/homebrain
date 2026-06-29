@@ -24,41 +24,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies and build
-        run: npm ci && npm run build
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check
+        run: npm run check
+
+      - name: Build
+        run: |
+          rm -rf build
+          npm run build
+          test -f build/index.html
 
       - name: Install SFTP client
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lftp
+
+      - name: Configure SSH key
+        env:
+          POCKETHOST_SFTP_HOST: ${{ secrets.POCKETHOST_SFTP_HOST }}
+          POCKETHOST_SFTP_PORT: ${{ secrets.POCKETHOST_SFTP_PORT }}
+          POCKETHOST_SSH_PRIVATE_KEY: ${{ secrets.POCKETHOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          : "${POCKETHOST_SFTP_HOST:?Missing POCKETHOST_SFTP_HOST secret}"
+          : "${POCKETHOST_SFTP_PORT:?Missing POCKETHOST_SFTP_PORT secret}"
+          : "${POCKETHOST_SSH_PRIVATE_KEY:?Missing POCKETHOST_SSH_PRIVATE_KEY secret}"
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$POCKETHOST_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$POCKETHOST_SFTP_PORT" "$POCKETHOST_SFTP_HOST" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
       - name: Upload build contents to PocketHost pb_public
         env:
           POCKETHOST_SFTP_HOST: ${{ secrets.POCKETHOST_SFTP_HOST }}
           POCKETHOST_SFTP_USERNAME: ${{ secrets.POCKETHOST_SFTP_USERNAME }}
-          POCKETHOST_SFTP_PASSWORD: ${{ secrets.POCKETHOST_SFTP_PASSWORD }}
           POCKETHOST_SFTP_PORT: ${{ secrets.POCKETHOST_SFTP_PORT }}
         run: |
           set -euo pipefail
 
           : "${POCKETHOST_SFTP_HOST:?Missing POCKETHOST_SFTP_HOST secret}"
           : "${POCKETHOST_SFTP_USERNAME:?Missing POCKETHOST_SFTP_USERNAME secret}"
-          : "${POCKETHOST_SFTP_PASSWORD:?Missing POCKETHOST_SFTP_PASSWORD secret}"
           : "${POCKETHOST_SFTP_PORT:?Missing POCKETHOST_SFTP_PORT secret}"
+          test -d build
 
-          lftp \
-            -u "$POCKETHOST_SFTP_USERNAME","$POCKETHOST_SFTP_PASSWORD" \
-            -p "$POCKETHOST_SFTP_PORT" \
-            "sftp://$POCKETHOST_SFTP_HOST" <<'LFTP'
+          lftp <<LFTP
           set cmd:fail-exit yes
           set net:max-retries 2
           set net:timeout 20
-          set sftp:auto-confirm yes
+          set sftp:connect-program "ssh -a -x -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          open -u "$POCKETHOST_SFTP_USERNAME","" -p "$POCKETHOST_SFTP_PORT" "sftp://$POCKETHOST_SFTP_HOST"
           mkdir -p pb_public
-          mirror --reverse --verbose --parallel=2 build/ pb_public/
+          mirror --reverse --delete --verbose --parallel=2 build/ pb_public/
           bye
           LFTP

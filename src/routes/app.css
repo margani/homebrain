@@ -725,6 +725,87 @@ a.dashboard-summary-card:hover {
 	color: var(--danger);
 }
 
+.filter-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 16px;
+}
+
+.filter-tabs a {
+	min-height: 38px;
+	padding: 9px 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: rgb(255 255 255 / 72%);
+	color: var(--muted);
+	font-size: 0.9rem;
+	font-weight: 740;
+}
+
+.filter-tabs a.active {
+	border-color: #bfd9cd;
+	background: var(--accent-soft);
+	color: var(--accent-strong);
+}
+
+.notes-archive-list {
+	display: grid;
+	gap: 12px;
+}
+
+.note-archive-card {
+	display: grid;
+	gap: 12px;
+}
+
+.note-archive-main {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.note-open-button {
+	width: 36px;
+	height: 36px;
+	min-height: 36px;
+}
+
+.note-archive-summary {
+	color: var(--muted);
+}
+
+.note-badge-row,
+.note-state-form {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.note-badge-row span,
+.linked-note-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	border-radius: 999px;
+	background: var(--surface-peach);
+	color: #7b5745;
+	font-size: 0.78rem;
+	font-weight: 760;
+	padding: 5px 9px;
+}
+
+.linked-note-pill {
+	background: var(--surface-blue);
+	color: #45677a;
+}
+
+.note-badge-row span.danger-pill {
+	background: var(--danger-soft);
+	color: var(--danger);
+}
+
 .capture-form {
 	display: grid;
 	gap: 14px;
@@ -1290,6 +1371,7 @@ label > select:focus,
 	.record-list li,
 	.routine-actions,
 	.inbox-form-actions,
+	.note-state-form,
 	.dashboard-pill-row,
 	.note-meta {
 		align-items: stretch;

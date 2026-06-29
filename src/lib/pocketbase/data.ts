@@ -51,6 +51,18 @@ export interface ShoppingConversionInput {
 	quantity_text?: string;
 }
 
+export const noteArchiveFilters = [
+	'all',
+	'new',
+	'reviewed',
+	'dismissed',
+	'linked',
+	'activity'
+] as const;
+
+export type NoteArchiveFilter = (typeof noteArchiveFilters)[number];
+export type NoteReviewState = 'new' | 'reviewed' | 'dismissed';
+
 export interface ActiveThingSummary {
 	id: string;
 	name: string;
@@ -129,6 +141,43 @@ function noteEventName(event: EventRecord) {
 	return event.title || firstNonEmptyLine(event.notes ?? '') || 'Untitled capture';
 }
 
+function isNoteArchiveEvent(event: EventRecord) {
+	return event.event_type === 'note' || event.event_type === 'activity';
+}
+
+function isNewNoteArchiveEvent(event: EventRecord) {
+	const metadata = recordMetadata(event);
+	return metadata.reviewed !== true && metadata.processed !== true && metadata.dismissed !== true;
+}
+
+function isReviewedNoteArchiveEvent(event: EventRecord) {
+	const metadata = recordMetadata(event);
+	return (metadata.reviewed === true || metadata.processed === true) && metadata.dismissed !== true;
+}
+
+function isDismissedNoteArchiveEvent(event: EventRecord) {
+	return recordMetadata(event).dismissed === true;
+}
+
+function isLinkedNoteArchiveEvent(event: EventRecord) {
+	return Boolean(event.thing);
+}
+
+function isActivityNoteArchiveEvent(event: EventRecord) {
+	const metadata = recordMetadata(event);
+	return event.event_type === 'activity' || typeof metadata.activity_type === 'string';
+}
+
+function matchesNoteArchiveFilter(event: EventRecord, filter: NoteArchiveFilter) {
+	if (filter === 'new') return isNewNoteArchiveEvent(event);
+	if (filter === 'reviewed') return isReviewedNoteArchiveEvent(event);
+	if (filter === 'dismissed') return isDismissedNoteArchiveEvent(event);
+	if (filter === 'linked') return isLinkedNoteArchiveEvent(event);
+	if (filter === 'activity') return isActivityNoteArchiveEvent(event);
+
+	return true;
+}
+
 function nextDueFromInterval(intervalDays?: number) {
 	const days = Number(intervalDays);
 	if (!Number.isFinite(days) || days <= 0) return new Date().toISOString();
@@ -185,6 +234,22 @@ export async function listRecentEvents(pb: PocketBase, limit = 12) {
 	return result.items;
 }
 
+export async function listNoteArchiveEvents(
+	pb: PocketBase,
+	userId: string,
+	filter: NoteArchiveFilter = 'all'
+) {
+	const events = await pb.collection('events').getFullList<EventRecord>({
+		filter: pb.filter('user = {:userId} && (event_type = "note" || event_type = "activity")', {
+			userId
+		}),
+		sort: '-happened_at,-created',
+		expand: 'thing'
+	});
+
+	return events.filter((event) => matchesNoteArchiveFilter(event, filter));
+}
+
 export async function listUnprocessedNoteEvents(pb: PocketBase, userId: string, limit = 50) {
 	try {
 		const result = await pb.collection('events').getList<EventRecord>(1, limit, {
@@ -209,6 +274,16 @@ export async function listUnprocessedNoteEvents(pb: PocketBase, userId: string, 
 			})
 			.slice(0, limit);
 	}
+}
+
+export async function getNoteArchiveEvent(pb: PocketBase, userId: string, eventId: string) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId, {
+		expand: 'thing'
+	});
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+	if (!isNoteArchiveEvent(event)) throw new Error('Event is not a note archive record.');
+
+	return event;
 }
 
 export async function countUnprocessedNoteEvents(pb: PocketBase, userId: string) {
@@ -379,6 +454,36 @@ export async function markNoteEventReviewed(
 			...metadata
 		}
 	});
+}
+
+export async function setNoteEventReviewState(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	state: NoteReviewState
+) {
+	const event = await getNoteArchiveEvent(pb, userId, eventId);
+	const metadata = {
+		...recordMetadata(event)
+	};
+
+	if (state === 'new') {
+		metadata.reviewed = false;
+		metadata.processed = false;
+		metadata.dismissed = false;
+	} else if (state === 'dismissed') {
+		metadata.reviewed = true;
+		metadata.dismissed = true;
+	} else {
+		metadata.reviewed = true;
+		metadata.dismissed = false;
+	}
+
+	return await pb.collection('events').update<EventRecord>(
+		eventId,
+		{ metadata },
+		{ expand: 'thing' }
+	);
 }
 
 export async function logNoteEventAsActivity(

@@ -8,6 +8,7 @@
 		LayoutDashboard,
 		LogOut,
 		MessageSquareText,
+		NotebookText,
 		Search,
 		Settings,
 		Boxes
@@ -24,12 +25,15 @@
 		{ href: '/today', label: 'Today', icon: House },
 		{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 		{ href: '/inbox', label: 'Inbox', icon: Inbox },
+		{ href: '/notes', label: 'Notes', icon: NotebookText },
 		{ href: '/things', label: 'Things', icon: Boxes },
 		{ href: '/reflection', label: 'Reflection', icon: MessageSquareText },
 		{ href: '/search', label: 'Search', icon: Search },
 		{ href: '/settings', label: 'Settings', icon: Settings }
 	];
-	const bottomNavItems = navItems.filter((item) => item.href !== '/dashboard');
+	const bottomNavItems = navItems.filter(
+		(item) => item.href !== '/dashboard' && item.href !== '/notes'
+	);
 
 	let isLoggingOut = $state(false);
 	const showTopLoading = $derived($hasPendingWork || navigating.type !== null || isLoggingOut);
@@ -38,6 +42,7 @@
 	function isActive(href: string) {
 		const pathname = page.url.pathname;
 		if (href === '/things') return pathname.startsWith('/things');
+		if (href === '/notes') return pathname.startsWith('/notes');
 		return pathname === href;
 	}
 

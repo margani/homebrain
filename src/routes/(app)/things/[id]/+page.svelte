@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Boxes } from 'lucide-svelte';
+	import { Activity, Boxes, NotebookText } from 'lucide-svelte';
 	import ThingForm from '$lib/components/ThingForm.svelte';
 	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
+	import type { JsonValue } from '$lib/pocketbase/types';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -11,6 +12,35 @@
 		thing.quantity_text || [thing.quantity_number, thing.unit].filter(Boolean).join(' ')
 	);
 	const metadata = $derived(thing.metadata ? JSON.stringify(thing.metadata, null, 2) : '');
+
+	function eventTitle(event: PageData['relatedEvents'][number]) {
+		return event.title || editorText(event.notes) || labelFromValue(event.event_type);
+	}
+
+	function eventMetadata(event: { metadata?: JsonValue }) {
+		if (event.metadata && !Array.isArray(event.metadata) && typeof event.metadata === 'object') {
+			return event.metadata;
+		}
+
+		return {};
+	}
+
+	function eventSummary(event: PageData['relatedEvents'][number]) {
+		const text = editorText(event.notes);
+		if (text && text !== event.title) return text;
+
+		const eventMeta = eventMetadata(event);
+		if (event.event_type === 'activity' && eventMeta.activity_type) {
+			return [
+				labelFromValue(String(eventMeta.activity_type)),
+				eventMeta.duration_minutes ? `${eventMeta.duration_minutes} min` : ''
+			]
+				.filter(Boolean)
+				.join(' · ');
+		}
+
+		return '';
+	}
 </script>
 
 <svelte:head>
@@ -72,6 +102,42 @@
 			<pre class="metadata-block">{metadata}</pre>
 		</article>
 	{/if}
+
+	<article class="panel wide-panel">
+		<div class="panel-heading">
+			<div>
+				<p class="eyebrow">Memory</p>
+				<h2>Related notes and activities</h2>
+			</div>
+		</div>
+		{#if data.relatedEvents.length}
+			<ul class="note-list">
+				{#each data.relatedEvents as event}
+					<li>
+						<div class="note-meta">
+							<div class="inline-record-link">
+								{#if event.event_type === 'activity'}
+									<Activity size={15} />
+								{:else}
+									<NotebookText size={15} />
+								{/if}
+								<a href={`/notes/${event.id}`}>{eventTitle(event)}</a>
+							</div>
+							<div class="dashboard-pill-row">
+								<span class="status-pill">{labelFromValue(event.event_type)}</span>
+								<time datetime={event.happened_at || event.created}>{formatDateTime(event.happened_at || event.created)}</time>
+							</div>
+						</div>
+						{#if eventSummary(event)}
+							<p>{eventSummary(event)}</p>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="empty-state">Linked notes and activities will appear here.</p>
+		{/if}
+	</article>
 
 	<article class="panel wide-panel">
 		<div class="panel-heading">

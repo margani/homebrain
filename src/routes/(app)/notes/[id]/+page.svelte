@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Activity, Boxes, Check, NotebookText, RotateCcw, X } from 'lucide-svelte';
+	import { Activity, Boxes, Check, Link2, NotebookText, RotateCcw, X } from 'lucide-svelte';
 	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
 	import type { JsonValue } from '$lib/pocketbase/types';
 	import type { ActionData, PageData } from './$types';
@@ -143,6 +143,37 @@
 			</a>
 		</article>
 	{/if}
+
+	<article class="panel">
+		<div class="panel-heading">
+			<div>
+				<p class="eyebrow">Link</p>
+				<h2>Thing</h2>
+			</div>
+			<span class="soft-icon"><Link2 size={20} /></span>
+		</div>
+		{#if data.things.length}
+			<form method="POST" action="?/linkThing" class="note-link-form">
+				<label>
+					Thing
+					<select name="thing_id" required>
+						<option value="" disabled selected={!note.thing}>Select a thing</option>
+						{#each data.things as thing}
+							<option value={thing.id} selected={thing.id === note.thing}>
+								{thing.name} · {labelFromValue(thing.type)}
+							</option>
+						{/each}
+					</select>
+				</label>
+				<button class="primary-action compact" type="submit">
+					<Link2 size={16} />
+					Link to thing
+				</button>
+			</form>
+		{:else}
+			<p class="empty-state">No things are available to link yet.</p>
+		{/if}
+	</article>
 
 	<article class="panel">
 		<div class="panel-heading">

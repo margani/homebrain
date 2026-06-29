@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { countUnprocessedNoteEvents } from '$lib/pocketbase/data';
+import { countUnreviewedNoteEvents } from '$lib/pocketbase/data';
 
 export async function load({ locals }) {
 	if (!locals.user) redirect(303, '/login');
@@ -7,6 +7,6 @@ export async function load({ locals }) {
 	return {
 		pbConfigured: locals.pbConfigured,
 		user: locals.user,
-		inboxCount: await countUnprocessedNoteEvents(locals.pb, locals.user.id)
+		inboxCount: await countUnreviewedNoteEvents(locals.pb, locals.user.id)
 	};
 }

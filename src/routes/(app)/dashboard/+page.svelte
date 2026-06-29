@@ -158,7 +158,10 @@
 					<li>
 						<div class="note-meta">
 							<strong>{titleFor(note)}</strong>
-							<time datetime={note.updated || note.happened_at || note.created}>{formatDateTime(note.updated || note.happened_at || note.created)}</time>
+							<div class="dashboard-pill-row">
+								<span class="status-pill">{labelFromValue(note.event_type)}</span>
+								<time datetime={note.updated || note.happened_at || note.created}>{formatDateTime(note.updated || note.happened_at || note.created)}</time>
+							</div>
 						</div>
 						{#if note.expand?.thing}
 							<a class="inline-record-link" href={`/things/${note.expand.thing.id}`}>
@@ -173,7 +176,7 @@
 				{/each}
 			</ul>
 		{:else}
-			<p class="empty-state">Linked notes will appear here.</p>
+			<p class="empty-state">Linked notes and activities will appear here.</p>
 		{/if}
 	</article>
 

@@ -250,7 +250,7 @@ export async function listNoteArchiveEvents(
 	return events.filter((event) => matchesNoteArchiveFilter(event, filter));
 }
 
-export async function listUnprocessedNoteEvents(pb: PocketBase, userId: string, limit = 50) {
+export async function listUnreviewedNoteEvents(pb: PocketBase, userId: string, limit = 50) {
 	try {
 		const result = await pb.collection('events').getList<EventRecord>(1, limit, {
 			filter: pb.filter(
@@ -286,8 +286,8 @@ export async function getNoteArchiveEvent(pb: PocketBase, userId: string, eventI
 	return event;
 }
 
-export async function countUnprocessedNoteEvents(pb: PocketBase, userId: string) {
-	return (await listUnprocessedNoteEvents(pb, userId, 100)).length;
+export async function countUnreviewedNoteEvents(pb: PocketBase, userId: string) {
+	return (await listUnreviewedNoteEvents(pb, userId, 100)).length;
 }
 
 export async function countReviewInboxNotes(pb: PocketBase, userId: string) {
@@ -322,10 +322,13 @@ export async function listDashboardRecentNotes(pb: PocketBase, userId: string, l
 	return result.items;
 }
 
-export async function listRecentlyLinkedNoteEvents(pb: PocketBase, userId: string, limit = 10) {
+export async function listRecentlyLinkedMemoryEvents(pb: PocketBase, userId: string, limit = 10) {
 	try {
 		const result = await pb.collection('events').getList<EventRecord>(1, limit, {
-			filter: pb.filter('user = {:userId} && event_type = "note" && thing != ""', { userId }),
+			filter: pb.filter(
+				'user = {:userId} && (event_type = "note" || event_type = "activity") && thing != ""',
+				{ userId }
+			),
 			sort: '-updated,-happened_at,-created',
 			expand: 'thing'
 		});
@@ -333,13 +336,25 @@ export async function listRecentlyLinkedNoteEvents(pb: PocketBase, userId: strin
 		return result.items;
 	} catch {
 		const result = await pb.collection('events').getList<EventRecord>(1, Math.max(limit, 50), {
-			filter: pb.filter('user = {:userId} && event_type = "note"', { userId }),
+			filter: pb.filter('user = {:userId} && (event_type = "note" || event_type = "activity")', {
+				userId
+			}),
 			sort: '-updated,-happened_at,-created',
 			expand: 'thing'
 		});
 
 		return result.items.filter((event) => Boolean(event.thing)).slice(0, limit);
 	}
+}
+
+export async function listActivityEvents(pb: PocketBase, userId: string, limit = 100) {
+	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+		filter: pb.filter('user = {:userId} && event_type = "activity"', { userId }),
+		sort: '-happened_at,-created',
+		expand: 'thing'
+	});
+
+	return result.items;
 }
 
 export async function listActiveThingSummaries(pb: PocketBase, userId: string, days = 30) {
@@ -420,24 +435,6 @@ export async function createQuickCaptureNote(pb: PocketBase, userId: string, tex
 	});
 }
 
-export async function markNoteEventProcessed(
-	pb: PocketBase,
-	userId: string,
-	eventId: string,
-	metadata: Record<string, JsonValue> = {}
-) {
-	const event = await pb.collection('events').getOne<EventRecord>(eventId);
-	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
-
-	return await pb.collection('events').update<EventRecord>(eventId, {
-		metadata: {
-			...recordMetadata(event),
-			processed: true,
-			...metadata
-		}
-	});
-}
-
 export async function markNoteEventReviewed(
 	pb: PocketBase,
 	userId: string,
@@ -446,13 +443,15 @@ export async function markNoteEventReviewed(
 ) {
 	const event = await pb.collection('events').getOne<EventRecord>(eventId);
 	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+	const nextMetadata: Record<string, JsonValue> = {
+		...recordMetadata(event),
+		reviewed: true,
+		...metadata
+	};
+	delete nextMetadata.processed;
 
 	return await pb.collection('events').update<EventRecord>(eventId, {
-		metadata: {
-			...recordMetadata(event),
-			reviewed: true,
-			...metadata
-		}
+		metadata: nextMetadata
 	});
 }
 
@@ -463,13 +462,13 @@ export async function setNoteEventReviewState(
 	state: NoteReviewState
 ) {
 	const event = await getNoteArchiveEvent(pb, userId, eventId);
-	const metadata = {
+	const metadata: Record<string, JsonValue> = {
 		...recordMetadata(event)
 	};
+	delete metadata.processed;
 
 	if (state === 'new') {
 		metadata.reviewed = false;
-		metadata.processed = false;
 		metadata.dismissed = false;
 	} else if (state === 'dismissed') {
 		metadata.reviewed = true;
@@ -505,6 +504,9 @@ export async function logNoteEventAsActivity(
 			duration_minutes: input.duration_minutes
 		}
 	};
+	if (payload.metadata && !Array.isArray(payload.metadata) && typeof payload.metadata === 'object') {
+		delete payload.metadata.processed;
+	}
 
 	if (input.notes !== undefined) {
 		payload.notes = input.notes;
@@ -556,6 +558,24 @@ export async function listUserThings(pb: PocketBase, userId: string, limit = 200
 		filter: pb.filter('user = {:userId}', { userId }),
 		sort: 'name',
 		expand: 'location'
+	});
+
+	return result.items;
+}
+
+export async function listThingMemoryEvents(
+	pb: PocketBase,
+	userId: string,
+	thingId: string,
+	limit = 50
+) {
+	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+		filter: pb.filter(
+			'user = {:userId} && thing = {:thingId} && (event_type = "note" || event_type = "activity")',
+			{ userId, thingId }
+		),
+		sort: '-happened_at,-created',
+		expand: 'thing'
 	});
 
 	return result.items;
@@ -621,7 +641,7 @@ export async function createRoutine(pb: PocketBase, userId: string, input: Routi
 	});
 }
 
-export async function linkNoteEventToThing(
+export async function linkMemoryEventToThing(
 	pb: PocketBase,
 	userId: string,
 	eventId: string,
@@ -632,21 +652,23 @@ export async function linkNoteEventToThing(
 		pb.collection('things').getOne<ThingRecord>(thingId)
 	]);
 	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
-	if (event.event_type !== 'note') throw new Error('Only note events can be linked from inbox.');
+	if (!isNoteArchiveEvent(event)) throw new Error('Only note and activity events can be linked.');
 	if (thing.user !== userId) throw new Error('Thing does not belong to the current user.');
+	const metadata: Record<string, JsonValue> = {
+		...recordMetadata(event),
+		reviewed: true,
+		linked_to: 'thing',
+		thing_id: thingId
+	};
+	delete metadata.processed;
 
 	return await pb.collection('events').update<EventRecord>(eventId, {
 		thing: thingId,
-		metadata: {
-			...recordMetadata(event),
-			reviewed: true,
-			linked_to: 'thing',
-			thing_id: thingId
-		}
+		metadata
 	});
 }
 
-export async function convertNoteEventToThing(
+export async function createThingFromNoteEvent(
 	pb: PocketBase,
 	userId: string,
 	eventId: string,
@@ -663,15 +685,15 @@ export async function convertNoteEventToThing(
 		notes: event.notes || ''
 	});
 
-	await markNoteEventProcessed(pb, userId, eventId, {
-		converted_to: 'thing',
+	await markNoteEventReviewed(pb, userId, eventId, {
+		reviewed_as: 'thing',
 		thing_id: thing.id
 	});
 
 	return thing;
 }
 
-export async function convertNoteEventToRoutine(
+export async function createRoutineFromNoteEvent(
 	pb: PocketBase,
 	userId: string,
 	eventId: string,
@@ -696,8 +718,8 @@ export async function convertNoteEventToRoutine(
 		active: true
 	});
 
-	await markNoteEventProcessed(pb, userId, eventId, {
-		converted_to: 'routine',
+	await markNoteEventReviewed(pb, userId, eventId, {
+		reviewed_as: 'routine',
 		thing_id: thing.id,
 		routine_id: routine.id
 	});
@@ -705,7 +727,7 @@ export async function convertNoteEventToRoutine(
 	return { thing, routine };
 }
 
-export async function convertNoteEventToShopping(
+export async function addNoteEventToBuyList(
 	pb: PocketBase,
 	userId: string,
 	eventId: string,
@@ -738,8 +760,8 @@ export async function convertNoteEventToShopping(
 				notes: event.notes || ''
 			});
 
-	await markNoteEventProcessed(pb, userId, eventId, {
-		converted_to: 'shopping',
+	await markNoteEventReviewed(pb, userId, eventId, {
+		reviewed_as: 'shopping',
 		thing_id: thing.id
 	});
 

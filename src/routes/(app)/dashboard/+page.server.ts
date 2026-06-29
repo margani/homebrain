@@ -4,7 +4,7 @@ import {
 	listDashboardBuyList,
 	listDashboardDueRoutines,
 	listDashboardRecentNotes,
-	listRecentlyLinkedNoteEvents,
+	listRecentlyLinkedMemoryEvents,
 	listTodayPromptAnswers,
 	localDateKey
 } from '$lib/pocketbase/data';
@@ -24,7 +24,7 @@ export async function load({ locals }) {
 	] = await Promise.all([
 		countReviewInboxNotes(locals.pb, userId),
 		listDashboardRecentNotes(locals.pb, userId),
-		listRecentlyLinkedNoteEvents(locals.pb, userId),
+		listRecentlyLinkedMemoryEvents(locals.pb, userId),
 		listActiveThingSummaries(locals.pb, userId),
 		listDashboardDueRoutines(locals.pb, userId),
 		listDashboardBuyList(locals.pb, userId),

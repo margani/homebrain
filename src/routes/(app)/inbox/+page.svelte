@@ -287,7 +287,7 @@
 		<span class="soft-icon"><Archive size={20} /></span>
 		<div>
 			<h2>Inbox is clear</h2>
-			<p class="empty-state">Unprocessed Quick Capture notes will appear here.</p>
+			<p class="empty-state">Unreviewed Quick Capture notes will appear here.</p>
 		</div>
 	</section>
 {/if}

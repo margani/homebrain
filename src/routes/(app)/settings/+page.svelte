@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { LayoutDashboard, LogOut, NotebookText, Settings } from 'lucide-svelte';
+	import { Activity, LayoutDashboard, LogOut, NotebookText, Settings } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { displayName, initialsForUser } from '$lib/pocketbase/auth';
 	import { logout } from '$lib/pocketbase/client';
@@ -103,6 +103,21 @@
 		<a class="secondary-action compact icon-text" href="/notes">
 			<NotebookText size={17} />
 			Notes Archive
+		</a>
+	</article>
+
+	<article class="panel">
+		<div class="panel-heading">
+			<div>
+				<p class="eyebrow">Archive</p>
+				<h2>Activities</h2>
+			</div>
+			<span class="soft-icon"><Activity size={20} /></span>
+		</div>
+		<p class="panel-copy">Review activity records logged from quick captures.</p>
+		<a class="secondary-action compact icon-text" href="/activities">
+			<Activity size={17} />
+			Activity Log
 		</a>
 	</article>
 

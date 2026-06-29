@@ -1,13 +1,12 @@
 import { fail } from '@sveltejs/kit';
 import {
-	convertNoteEventToRoutine,
-	convertNoteEventToShopping,
-	convertNoteEventToThing,
-	linkNoteEventToThing,
-	listUnprocessedNoteEvents,
+	addNoteEventToBuyList,
+	createRoutineFromNoteEvent,
+	createThingFromNoteEvent,
+	linkMemoryEventToThing,
+	listUnreviewedNoteEvents,
 	listUserThings,
 	logNoteEventAsActivity,
-	markNoteEventProcessed,
 	markNoteEventReviewed
 } from '$lib/pocketbase/data';
 import {
@@ -22,7 +21,7 @@ import type { Actions } from './$types';
 
 export async function load({ locals }) {
 	return {
-		inboxItems: locals.user ? await listUnprocessedNoteEvents(locals.pb, locals.user.id) : [],
+		inboxItems: locals.user ? await listUnreviewedNoteEvents(locals.pb, locals.user.id) : [],
 		things: locals.user ? await listUserThings(locals.pb, locals.user.id) : []
 	};
 }
@@ -39,19 +38,6 @@ function requireEventId(formData: FormData) {
 }
 
 export const actions = {
-	processed: async ({ locals, request }) => {
-		const id = requireEventId(await request.formData());
-		if (!locals.user) return fail(401, { inboxError: 'Sign in again before updating inbox.' });
-		if (!id) return fail(400, { inboxError: 'Choose an inbox item first.' });
-
-		try {
-			await markNoteEventProcessed(locals.pb, locals.user.id, id);
-		} catch {
-			return fail(500, { inboxError: 'The item could not be marked processed.' });
-		}
-
-		return { inboxSaved: true, eventId: id, message: 'Marked processed' };
-	},
 	dismiss: async ({ locals, request }) => {
 		const id = requireEventId(await request.formData());
 		if (!locals.user) return fail(401, { inboxError: 'Sign in again before updating inbox.' });
@@ -87,7 +73,7 @@ export const actions = {
 		const thingId = String(formData.get('thing_id') ?? '').trim();
 		if (thingId) {
 			try {
-				await linkNoteEventToThing(locals.pb, locals.user.id, id, thingId);
+				await linkMemoryEventToThing(locals.pb, locals.user.id, id, thingId);
 			} catch {
 				return fail(500, { inboxError: 'The item could not be linked to that thing.' });
 			}
@@ -103,7 +89,7 @@ export const actions = {
 			: 'unknown';
 
 		try {
-			await convertNoteEventToThing(locals.pb, locals.user.id, id, type, status);
+			await createThingFromNoteEvent(locals.pb, locals.user.id, id, type, status);
 		} catch {
 			return fail(500, { inboxError: 'The item could not be saved as a thing.' });
 		}
@@ -131,7 +117,7 @@ export const actions = {
 		}
 
 		try {
-			await convertNoteEventToRoutine(
+			await createRoutineFromNoteEvent(
 				locals.pb,
 				locals.user.id,
 				id,
@@ -157,7 +143,7 @@ export const actions = {
 		const quantityText = String(formData.get('quantity_text') ?? '').trim();
 
 		try {
-			await convertNoteEventToShopping(locals.pb, locals.user.id, id, {
+			await addNoteEventToBuyList(locals.pb, locals.user.id, id, {
 				...(itemName ? { name: itemName } : {}),
 				...(quantityText ? { quantity_text: quantityText } : {})
 			});

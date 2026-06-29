@@ -777,10 +777,20 @@ a.dashboard-summary-card:hover {
 }
 
 .note-badge-row,
-.note-state-form {
+.note-state-form,
+.note-link-form {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
+}
+
+.note-link-form {
+	align-items: end;
+	margin-top: 14px;
+}
+
+.note-link-form label {
+	flex: 1 1 220px;
 }
 
 .note-badge-row span,
@@ -1372,6 +1382,7 @@ label > select:focus,
 	.routine-actions,
 	.inbox-form-actions,
 	.note-state-form,
+	.note-link-form,
 	.dashboard-pill-row,
 	.note-meta {
 		align-items: stretch;

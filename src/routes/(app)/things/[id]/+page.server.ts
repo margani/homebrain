@@ -1,18 +1,26 @@
 import { error, fail } from '@sveltejs/kit';
-import { createLocation, getThing, listLocations, updateThing } from '$lib/pocketbase/data';
+import {
+	createLocation,
+	getThing,
+	listLocations,
+	listThingMemoryEvents,
+	updateThing
+} from '$lib/pocketbase/data';
 import { parseThingFormData } from '$lib/pocketbase/forms';
 import type { Actions } from './$types';
 
 export async function load({ locals, params }) {
 	try {
-		const [thing, locations] = await Promise.all([
+		const [thing, locations, relatedEvents] = await Promise.all([
 			getThing(locals.pb, params.id),
-			listLocations(locals.pb)
+			listLocations(locals.pb),
+			locals.user ? listThingMemoryEvents(locals.pb, locals.user.id, params.id) : []
 		]);
 
 		return {
 			thing,
-			locations
+			locations,
+			relatedEvents
 		};
 	} catch {
 		error(404, 'Thing not found.');

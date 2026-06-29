@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { navigating, page } from '$app/state';
 	import {
+		Activity,
 		Brain,
 		House,
 		Inbox,
@@ -26,13 +27,14 @@
 		{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 		{ href: '/inbox', label: 'Inbox', icon: Inbox },
 		{ href: '/notes', label: 'Notes', icon: NotebookText },
+		{ href: '/activities', label: 'Activities', icon: Activity },
 		{ href: '/things', label: 'Things', icon: Boxes },
 		{ href: '/reflection', label: 'Reflection', icon: MessageSquareText },
 		{ href: '/search', label: 'Search', icon: Search },
 		{ href: '/settings', label: 'Settings', icon: Settings }
 	];
 	const bottomNavItems = navItems.filter(
-		(item) => item.href !== '/dashboard' && item.href !== '/notes'
+		(item) => item.href !== '/dashboard' && item.href !== '/notes' && item.href !== '/activities'
 	);
 
 	let isLoggingOut = $state(false);
@@ -43,6 +45,7 @@
 		const pathname = page.url.pathname;
 		if (href === '/things') return pathname.startsWith('/things');
 		if (href === '/notes') return pathname.startsWith('/notes');
+		if (href === '/activities') return pathname.startsWith('/activities');
 		return pathname === href;
 	}
 

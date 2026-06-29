@@ -5,6 +5,7 @@
 		Brain,
 		House,
 		Inbox,
+		LayoutDashboard,
 		LogOut,
 		MessageSquareText,
 		Search,
@@ -21,12 +22,14 @@
 
 	const navItems = [
 		{ href: '/today', label: 'Today', icon: House },
+		{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 		{ href: '/inbox', label: 'Inbox', icon: Inbox },
 		{ href: '/things', label: 'Things', icon: Boxes },
 		{ href: '/reflection', label: 'Reflection', icon: MessageSquareText },
 		{ href: '/search', label: 'Search', icon: Search },
 		{ href: '/settings', label: 'Settings', icon: Settings }
 	];
+	const bottomNavItems = navItems.filter((item) => item.href !== '/dashboard');
 
 	let isLoggingOut = $state(false);
 	const showTopLoading = $derived($hasPendingWork || navigating.type !== null || isLoggingOut);
@@ -130,7 +133,7 @@
 	</div>
 
 	<nav class="bottom-nav" aria-label="Primary">
-		{#each navItems as item}
+		{#each bottomNavItems as item}
 			{@const Icon = item.icon}
 			<a class:active={isActive(item.href)} href={item.href}>
 				<Icon size={20} />

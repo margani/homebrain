@@ -39,6 +39,15 @@ export interface RoutineInput {
 	metadata?: JsonValue;
 }
 
+export interface ActiveThingSummary {
+	id: string;
+	name: string;
+	type: ThingType;
+	status?: ThingStatus;
+	linkedEventCount: number;
+	latestActivity: string;
+}
+
 const reflectionPromptTypes = [
 	'daily_reflection',
 	'mood',
@@ -61,6 +70,47 @@ function recordMetadata(record: { metadata?: JsonValue }) {
 	}
 
 	return {};
+}
+
+function recentCutoffIso(days: number) {
+	return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function eventActivityDate(event: EventRecord) {
+	return event.happened_at || event.updated || event.created;
+}
+
+function groupActiveThingEvents(events: EventRecord[]) {
+	const summaries = new Map<string, ActiveThingSummary>();
+
+	for (const event of events) {
+		const thing = event.expand?.thing;
+		if (!thing) continue;
+
+		const latestActivity = eventActivityDate(event);
+		const existing = summaries.get(thing.id);
+
+		if (!existing) {
+			summaries.set(thing.id, {
+				id: thing.id,
+				name: thing.name,
+				type: thing.type,
+				status: thing.status,
+				linkedEventCount: 1,
+				latestActivity
+			});
+			continue;
+		}
+
+		existing.linkedEventCount += 1;
+		if (new Date(latestActivity).getTime() > new Date(existing.latestActivity).getTime()) {
+			existing.latestActivity = latestActivity;
+		}
+	}
+
+	return [...summaries.values()].sort(
+		(a, b) => new Date(b.latestActivity).getTime() - new Date(a.latestActivity).getTime()
+	);
 }
 
 function noteEventName(event: EventRecord) {
@@ -147,6 +197,123 @@ export async function listUnprocessedNoteEvents(pb: PocketBase, userId: string, 
 
 export async function countUnprocessedNoteEvents(pb: PocketBase, userId: string) {
 	return (await listUnprocessedNoteEvents(pb, userId, 100)).length;
+}
+
+export async function countReviewInboxNotes(pb: PocketBase, userId: string) {
+	try {
+		const result = await pb.collection('events').getList<EventRecord>(1, 1, {
+			filter: pb.filter(
+				'user = {:userId} && event_type = "note" && metadata.reviewed != true && metadata.processed != true',
+				{ userId }
+			)
+		});
+
+		return result.totalItems;
+	} catch {
+		const events = await pb.collection('events').getFullList<EventRecord>({
+			filter: pb.filter('user = {:userId} && event_type = "note"', { userId }),
+			sort: '-happened_at,-created'
+		});
+
+		return events.filter((event) => {
+			const metadata = recordMetadata(event);
+			return metadata.reviewed !== true && metadata.processed !== true;
+		}).length;
+	}
+}
+
+export async function listDashboardRecentNotes(pb: PocketBase, userId: string, limit = 10) {
+	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+		filter: pb.filter('user = {:userId} && event_type = "note"', { userId }),
+		sort: '-happened_at,-created'
+	});
+
+	return result.items;
+}
+
+export async function listRecentlyLinkedNoteEvents(pb: PocketBase, userId: string, limit = 10) {
+	try {
+		const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+			filter: pb.filter('user = {:userId} && event_type = "note" && thing != ""', { userId }),
+			sort: '-updated,-happened_at,-created',
+			expand: 'thing'
+		});
+
+		return result.items;
+	} catch {
+		const result = await pb.collection('events').getList<EventRecord>(1, Math.max(limit, 50), {
+			filter: pb.filter('user = {:userId} && event_type = "note"', { userId }),
+			sort: '-updated,-happened_at,-created',
+			expand: 'thing'
+		});
+
+		return result.items.filter((event) => Boolean(event.thing)).slice(0, limit);
+	}
+}
+
+export async function listActiveThingSummaries(pb: PocketBase, userId: string, days = 30) {
+	const cutoff = recentCutoffIso(days);
+
+	try {
+		const events = await pb.collection('events').getFullList<EventRecord>({
+			filter: pb.filter('user = {:userId} && thing != "" && happened_at >= {:cutoff}', {
+				userId,
+				cutoff
+			}),
+			sort: '-happened_at,-created',
+			expand: 'thing'
+		});
+
+		return groupActiveThingEvents(events);
+	} catch {
+		const events = await pb.collection('events').getFullList<EventRecord>({
+			filter: pb.filter(
+				'user = {:userId} && event_type = "note" && thing != "" && happened_at >= {:cutoff}',
+				{ userId, cutoff }
+			),
+			sort: '-happened_at,-created',
+			expand: 'thing'
+		});
+
+		return groupActiveThingEvents(events);
+	}
+}
+
+export async function listDashboardDueRoutines(pb: PocketBase, userId: string) {
+	try {
+		return await pb.collection('routines').getFullList<RoutineRecord>({
+			filter: pb.filter('user = {:userId} && active = true && next_due_at != ""', { userId }),
+			sort: 'next_due_at',
+			expand: 'thing'
+		});
+	} catch {
+		const routines = await pb.collection('routines').getFullList<RoutineRecord>({
+			filter: pb.filter('user = {:userId} && active = true', { userId }),
+			sort: 'next_due_at',
+			expand: 'thing'
+		});
+
+		return routines.filter((routine) => Boolean(routine.next_due_at));
+	}
+}
+
+export async function listDashboardBuyList(pb: PocketBase, userId: string) {
+	try {
+		return await pb.collection('things').getFullList<ThingRecord>({
+			filter: pb.filter(
+				'user = {:userId} && type = "inventory" && (status = "low" || status = "empty")',
+				{ userId }
+			),
+			sort: 'status,name'
+		});
+	} catch {
+		const things = await pb.collection('things').getFullList<ThingRecord>({
+			filter: pb.filter('user = {:userId} && type = "inventory"', { userId }),
+			sort: 'status,name'
+		});
+
+		return things.filter((thing) => thing.status === 'low' || thing.status === 'empty');
+	}
 }
 
 export async function createQuickCaptureNote(pb: PocketBase, userId: string, text: string) {

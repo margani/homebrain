@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { LogOut, Settings } from 'lucide-svelte';
+	import { LayoutDashboard, LogOut, Settings } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { displayName, initialsForUser } from '$lib/pocketbase/auth';
 	import { logout } from '$lib/pocketbase/client';
@@ -74,6 +74,21 @@
 				<dd>{formatDateTime(data.user?.updated)}</dd>
 			</div>
 		</dl>
+	</article>
+
+	<article class="panel">
+		<div class="panel-heading">
+			<div>
+				<p class="eyebrow">Review</p>
+				<h2>Dashboard</h2>
+			</div>
+			<span class="soft-icon"><LayoutDashboard size={20} /></span>
+		</div>
+		<p class="panel-copy">Review recent captures, linked things, routines, and buy-list items.</p>
+		<a class="secondary-action compact icon-text" href="/dashboard">
+			<LayoutDashboard size={17} />
+			Review Dashboard
+		</a>
 	</article>
 
 	<article class="panel">

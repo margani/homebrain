@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import type { SubmitFunction } from '@sveltejs/kit';
 	import { ArrowLeft, ArrowRight, Check, SkipForward } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
+	import { getBrowserPb, requireUser } from '$lib/pocketbase/client';
+	import { upsertPromptAnswer } from '$lib/pocketbase/data';
 	import { editorText } from '$lib/pocketbase/format';
 	import { beginPendingWork } from '$lib/ui/pending';
-	import type { ActionData, PageData } from './$types';
+	import type { PageData } from './$types';
 
-	let { data, form }: { data: PageData; form?: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
 
 	let index = $state(0);
 	let draftAnswer = $state('');
@@ -16,6 +16,7 @@
 	let answerOverrides = $state<Record<string, string>>({});
 	let showSaved = $state(false);
 	let hideServerSaved = $state(false);
+	let reflectionError = $state('');
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
 	let loadedPromptId = $state<string | null>(null);
 
@@ -72,34 +73,40 @@
 		index += 1;
 	}
 
-	const saveEnhance: SubmitFunction = ({ cancel, formData }) => {
+	async function handleSave(event: SubmitEvent) {
+		event.preventDefault();
 		if (isSaving) {
-			cancel();
 			return;
 		}
 
+		if (!currentPrompt) return;
+		reflectionError = '';
+		const form = event.currentTarget;
+		if (!(form instanceof HTMLFormElement)) return;
+		const formData = new FormData(form);
 		const promptId = String(formData.get('prompt') ?? '').trim();
 		const answer = String(formData.get('answer') ?? '').trim();
 		isSaving = true;
 		const endPendingWork = beginPendingWork();
 
-		return async ({ result, update }) => {
-			await update({ reset: false, invalidateAll: false });
+		try {
+			const user = await requireUser();
+			await upsertPromptAnswer(getBrowserPb(), user.id, promptId, answer, data.dateKey);
+			answerOverrides = { ...answerOverrides, [promptId]: answer };
+			flashSaved();
+
+			if (isLastQuestion) {
+				isComplete = true;
+			} else {
+				index += 1;
+			}
+		} catch (error) {
+			reflectionError = error instanceof Error ? error.message : 'The answer could not be saved.';
+		} finally {
 			endPendingWork();
 			isSaving = false;
-
-			if (result.type === 'success') {
-				answerOverrides = { ...answerOverrides, [promptId]: answer };
-				flashSaved();
-
-				if (isLastQuestion) {
-					isComplete = true;
-				} else {
-					index += 1;
-				}
-			}
-		};
-	};
+		}
+	}
 </script>
 
 <svelte:head>
@@ -154,7 +161,7 @@
 			</div>
 		</div>
 
-		<form method="POST" action="?/save" class="stacked-form reflection-form" use:enhance={saveEnhance}>
+		<form method="POST" class="stacked-form reflection-form" onsubmit={handleSave}>
 			<input type="hidden" name="prompt" value={currentPrompt.id} />
 			<input type="hidden" name="date" value={data.dateKey} />
 
@@ -169,9 +176,9 @@
 			</label>
 
 			<div class="reflection-status">
-				{#if form?.reflectionError}
-					<p class="notice error">{form.reflectionError}</p>
-				{:else if showSaved || (form?.reflectionSaved && !hideServerSaved)}
+				{#if reflectionError}
+					<p class="notice error">{reflectionError}</p>
+				{:else if showSaved && !hideServerSaved}
 					<p class="notice success">Saved</p>
 				{:else}
 					<p class="hint">Answers are saved for {data.dateKey}.</p>

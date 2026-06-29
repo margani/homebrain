@@ -1,12 +1,24 @@
 <script lang="ts">
 	import { Activity, Boxes, Check, Link2, NotebookText, RotateCcw, X } from 'lucide-svelte';
+	import { getBrowserPb, requireUser } from '$lib/pocketbase/client';
+	import {
+		linkMemoryEventToThing,
+		setNoteEventReviewState,
+		type NoteReviewState
+	} from '$lib/pocketbase/data';
 	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
 	import type { JsonValue } from '$lib/pocketbase/types';
-	import type { ActionData, PageData } from './$types';
+	import type { PageData } from './$types';
 
-	let { data, form }: { data: PageData; form?: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
 
-	const note = $derived(data.note);
+	const reviewStates: NoteReviewState[] = ['new', 'reviewed', 'dismissed'];
+	let noteOverride = $state<PageData['note'] | null>(null);
+	let noteError = $state('');
+	let noteMessage = $state('');
+	let isSaving = $state(false);
+
+	const note = $derived(noteOverride?.id === data.note.id ? noteOverride : data.note);
 	const metadata = $derived(metadataFor(note));
 	const metadataText = $derived(
 		Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : ''
@@ -45,6 +57,70 @@
 	function noteBody() {
 		return editorText(note.notes);
 	}
+
+	async function handleReviewState(event: SubmitEvent) {
+		event.preventDefault();
+		const submitter = event.submitter;
+		const stateValue =
+			submitter instanceof HTMLButtonElement ? String(submitter.value ?? '') : '';
+		if (!reviewStates.includes(stateValue as NoteReviewState)) {
+			noteError = 'Choose a valid review state.';
+			return;
+		}
+
+		isSaving = true;
+		noteError = '';
+		noteMessage = '';
+
+		try {
+			const user = await requireUser();
+			noteOverride = await setNoteEventReviewState(
+				getBrowserPb(),
+				user.id,
+				note.id,
+				stateValue as NoteReviewState
+			);
+			noteMessage = 'Review state updated';
+		} catch (error) {
+			noteError = error instanceof Error ? error.message : 'The note review state could not be updated.';
+		} finally {
+			isSaving = false;
+		}
+	}
+
+	async function handleLinkThing(event: SubmitEvent) {
+		event.preventDefault();
+		const form = event.currentTarget;
+		if (!(form instanceof HTMLFormElement)) return;
+		const formData = new FormData(form);
+		const thingId = String(formData.get('thing_id') ?? '').trim();
+		if (!thingId) {
+			noteError = 'Choose a thing to link.';
+			return;
+		}
+
+		isSaving = true;
+		noteError = '';
+		noteMessage = '';
+
+		try {
+			const user = await requireUser();
+			const updated = await linkMemoryEventToThing(getBrowserPb(), user.id, note.id, thingId);
+			const thing = data.things.find((item) => item.id === thingId);
+			noteOverride = {
+				...updated,
+				expand: {
+					...updated.expand,
+					...(thing ? { thing } : {})
+				}
+			};
+			noteMessage = 'Linked to thing';
+		} catch (error) {
+			noteError = error instanceof Error ? error.message : 'The record could not be linked to that thing.';
+		} finally {
+			isSaving = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -74,13 +150,13 @@
 	</div>
 </section>
 
-{#if form?.noteError}
+{#if noteError}
 	<section class="panel">
-		<p class="notice error">{form.noteError}</p>
+		<p class="notice error">{noteError}</p>
 	</section>
-{:else if form?.noteSaved}
+{:else if noteMessage}
 	<section class="panel">
-		<p class="notice success">{form.message ?? 'Saved'}</p>
+		<p class="notice success">{noteMessage}</p>
 	</section>
 {/if}
 
@@ -153,7 +229,7 @@
 			<span class="soft-icon"><Link2 size={20} /></span>
 		</div>
 		{#if data.things.length}
-			<form method="POST" action="?/linkThing" class="note-link-form">
+			<form method="POST" class="note-link-form" onsubmit={handleLinkThing}>
 				<label>
 					Thing
 					<select name="thing_id" required>
@@ -165,7 +241,7 @@
 						{/each}
 					</select>
 				</label>
-				<button class="primary-action compact" type="submit">
+				<button class="primary-action compact" type="submit" disabled={isSaving}>
 					<Link2 size={16} />
 					Link to thing
 				</button>
@@ -183,16 +259,16 @@
 			</div>
 		</div>
 		<p class="panel-copy">This changes archive state only. The note record remains saved.</p>
-		<form method="POST" action="?/reviewState" class="note-state-form">
-			<button class="secondary-action compact" type="submit" name="state" value="new">
+		<form method="POST" class="note-state-form" onsubmit={handleReviewState}>
+			<button class="secondary-action compact" type="submit" name="state" value="new" disabled={isSaving}>
 				<RotateCcw size={16} />
 				Mark new
 			</button>
-			<button class="primary-action compact" type="submit" name="state" value="reviewed">
+			<button class="primary-action compact" type="submit" name="state" value="reviewed" disabled={isSaving}>
 				<Check size={16} />
 				Mark reviewed
 			</button>
-			<button class="secondary-action compact" type="submit" name="state" value="dismissed">
+			<button class="secondary-action compact" type="submit" name="state" value="dismissed" disabled={isSaving}>
 				<X size={16} />
 				Dismiss
 			</button>

@@ -1,11 +1,8 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
-	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Plus } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { editorText, labelFromValue } from '$lib/pocketbase/format';
-	import type { ThingFormValues } from '$lib/pocketbase/forms';
+	import { parseThingFormData, type ParsedThingForm, type ThingFormValues } from '$lib/pocketbase/forms';
 	import {
 		thingStatusOptions,
 		thingTypeOptions,
@@ -14,16 +11,10 @@
 	} from '$lib/pocketbase/types';
 	import { beginPendingWork } from '$lib/ui/pending';
 
-	type ThingActionData = {
-		thingError?: string;
-		thingSaved?: boolean;
-		values?: ThingFormValues;
-	};
-
 	let {
 		thing = null,
 		locations,
-		form = undefined,
+		onSave,
 		submitLabel,
 		pendingLabel = 'Saving...',
 		pendingMessage = 'Saving...',
@@ -32,7 +23,7 @@
 	}: {
 		thing?: ThingRecord | null;
 		locations: LocationRecord[];
-		form?: ThingActionData | null;
+		onSave: (parsed: ParsedThingForm) => Promise<void>;
 		submitLabel: string;
 		pendingLabel?: string;
 		pendingMessage?: string;
@@ -42,26 +33,27 @@
 
 	let isSubmitting = $state(false);
 	let isCreatingLocation = $state(false);
-	let isOpeningThing = $state(false);
 	let showSaved = $state(false);
 	let hideServerSaved = $state(false);
+	let errorMessage = $state('');
+	let submittedValues = $state<ThingFormValues | null>(null);
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const initialMetadata = $derived(thing?.metadata ? JSON.stringify(thing.metadata, null, 2) : '');
 	const values = $derived({
-		name: form?.values?.name ?? thing?.name ?? '',
-		type: form?.values?.type ?? thing?.type ?? 'other',
-		status: form?.values?.status ?? thing?.status ?? '',
-		location: form?.values?.location ?? thing?.location ?? '',
-		quantity_text: form?.values?.quantity_text ?? thing?.quantity_text ?? '',
+		name: submittedValues?.name ?? thing?.name ?? '',
+		type: submittedValues?.type ?? thing?.type ?? 'other',
+		status: submittedValues?.status ?? thing?.status ?? '',
+		location: submittedValues?.location ?? thing?.location ?? '',
+		quantity_text: submittedValues?.quantity_text ?? thing?.quantity_text ?? '',
 		quantity_number:
-			form?.values?.quantity_number ?? (thing?.quantity_number == null ? '' : String(thing.quantity_number)),
-		unit: form?.values?.unit ?? thing?.unit ?? '',
-		notes: form?.values?.notes ?? editorText(thing?.notes) ?? '',
-		metadata: form?.values?.metadata ?? initialMetadata,
-		new_location_name: form?.values?.new_location_name ?? '',
-		new_location_path: form?.values?.new_location_path ?? '',
-		new_location_notes: form?.values?.new_location_notes ?? ''
+			submittedValues?.quantity_number ?? (thing?.quantity_number == null ? '' : String(thing.quantity_number)),
+		unit: submittedValues?.unit ?? thing?.unit ?? '',
+		notes: submittedValues?.notes ?? editorText(thing?.notes) ?? '',
+		metadata: submittedValues?.metadata ?? initialMetadata,
+		new_location_name: submittedValues?.new_location_name ?? '',
+		new_location_path: submittedValues?.new_location_path ?? '',
+		new_location_notes: submittedValues?.new_location_notes ?? ''
 	});
 
 	function flashSaved() {
@@ -74,54 +66,49 @@
 		}, 2000);
 	}
 
-	const submitEnhance: SubmitFunction = ({ cancel, formData }) => {
+	async function handleSubmit(event: SubmitEvent) {
+		event.preventDefault();
+
 		if (isSubmitting) {
-			cancel();
 			return;
 		}
 
+		const form = event.currentTarget;
+		if (!(form instanceof HTMLFormElement)) return;
+		const formData = new FormData(form);
+		const parsed = parseThingFormData(formData);
+		submittedValues = parsed.values;
+		errorMessage = parsed.error ?? '';
+		if (parsed.error) return;
+
 		isSubmitting = true;
 		isCreatingLocation = Boolean(String(formData.get('new_location_name') ?? '').trim());
-		isOpeningThing = false;
 		const endPendingWork = beginPendingWork();
 
-		return async ({ result, update }) => {
-			if (result.type === 'redirect') {
-				isCreatingLocation = false;
-				isOpeningThing = true;
-
-				try {
-					await goto(result.location);
-				} finally {
-					endPendingWork();
-					isSubmitting = false;
-					isOpeningThing = false;
-				}
-				return;
-			}
-
-			await update({ reset: false, invalidateAll: false });
+		try {
+			await onSave(parsed);
+			submittedValues = null;
+			errorMessage = '';
+			flashSaved();
+		} catch (error) {
+			errorMessage = error instanceof Error ? error.message : 'The thing could not be saved.';
+		} finally {
 			endPendingWork();
 			isSubmitting = false;
 			isCreatingLocation = false;
-			isOpeningThing = false;
-
-			if (result.type === 'success') {
-				flashSaved();
-			}
-		};
-	};
+		}
+	}
 </script>
 
-<form method="POST" class="stacked-form domain-form pending-region" use:enhance={submitEnhance}>
+<form method="POST" class="stacked-form domain-form pending-region" onsubmit={handleSubmit}>
 	<PendingOverlay
 		active={isSubmitting}
-		message={isOpeningThing ? 'Opening thing...' : isCreatingLocation ? locationPendingMessage : pendingMessage}
+		message={isCreatingLocation ? locationPendingMessage : pendingMessage}
 	/>
 
-	{#if form?.thingError}
-		<p class="notice error">{form.thingError}</p>
-	{:else if showSaved || (form?.thingSaved && !hideServerSaved)}
+	{#if errorMessage}
+		<p class="notice error">{errorMessage}</p>
+	{:else if showSaved && !hideServerSaved}
 		<p class="notice success">{successMessage}</p>
 	{/if}
 
@@ -216,11 +203,7 @@
 		<button class="primary-action compact" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
 			{#if isSubmitting}
 				<span class="loading-spinner light" aria-hidden="true"></span>
-				{#if isOpeningThing}
-					Opening...
-				{:else}
-					{pendingLabel}
-				{/if}
+				{pendingLabel}
 			{:else}
 				{submitLabel}
 			{/if}

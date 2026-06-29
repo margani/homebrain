@@ -3,12 +3,10 @@
 	import { Activity, LayoutDashboard, LogOut, NotebookText, Settings } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { displayName, initialsForUser } from '$lib/pocketbase/auth';
-	import { logout } from '$lib/pocketbase/client';
+	import { currentUser, logout } from '$lib/pocketbase/client';
 	import { formatDateTime } from '$lib/pocketbase/format';
 	import { beginPendingWork } from '$lib/ui/pending';
-	import type { PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
 	let isLoggingOut = $state(false);
 
 	async function handleLogout() {
@@ -17,7 +15,7 @@
 		isLoggingOut = true;
 		const endPendingWork = beginPendingWork();
 		try {
-			await logout();
+			logout();
 			await goto('/login');
 		} finally {
 			endPendingWork();
@@ -45,33 +43,33 @@
 		<div class="panel-heading">
 			<div>
 				<p class="eyebrow">Signed in</p>
-				<h2>{displayName(data.user)}</h2>
+				<h2>{displayName($currentUser)}</h2>
 			</div>
 			<span class="soft-icon"><Settings size={20} /></span>
 		</div>
 		<div class="profile-row">
-			{#if data.user?.avatarUrl}
-				<img class="avatar large-avatar" src={data.user.avatarUrl} alt="" />
+			{#if $currentUser?.avatarUrl}
+				<img class="avatar large-avatar" src={$currentUser.avatarUrl} alt="" />
 			{:else}
-				<div class="avatar large-avatar initials">{initialsForUser(data.user)}</div>
+				<div class="avatar large-avatar initials">{initialsForUser($currentUser)}</div>
 			{/if}
 			<div>
-				<strong>{data.user?.email}</strong>
-				<span>{data.user?.verified ? 'Verified email' : 'Email not verified'}</span>
+				<strong>{$currentUser?.email}</strong>
+				<span>{$currentUser?.verified ? 'Verified email' : 'Email not verified'}</span>
 			</div>
 		</div>
 		<dl class="detail-list">
 			<div>
 				<dt>User ID</dt>
-				<dd>{data.user?.id}</dd>
+				<dd>{$currentUser?.id}</dd>
 			</div>
 			<div>
 				<dt>Created</dt>
-				<dd>{formatDateTime(data.user?.created)}</dd>
+				<dd>{formatDateTime($currentUser?.created)}</dd>
 			</div>
 			<div>
 				<dt>Updated</dt>
-				<dd>{formatDateTime(data.user?.updated)}</dd>
+				<dd>{formatDateTime($currentUser?.updated)}</dd>
 			</div>
 		</dl>
 	</article>

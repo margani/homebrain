@@ -1,22 +1,32 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { invalidate } from '$app/navigation';
-	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Activity, Archive, Boxes, Check, Repeat, ShoppingBasket, X } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
+	import {
+		getBrowserPb,
+		refreshInboxCount,
+		requireUser
+	} from '$lib/pocketbase/client';
+	import {
+		addNoteEventToBuyList,
+		createRoutineFromNoteEvent,
+		linkMemoryEventToThing,
+		logNoteEventAsActivity,
+		markNoteEventReviewed
+	} from '$lib/pocketbase/data';
 	import { editorText, firstNonEmptyLine, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
-	import { activityTypeOptions } from '$lib/pocketbase/types';
+	import { activityTypeOptions, type ActivityType } from '$lib/pocketbase/types';
 	import { beginPendingWork } from '$lib/ui/pending';
-	import type { ActionData, PageData } from './$types';
+	import type { PageData } from './$types';
 
 	type InboxAction = 'activity' | 'shopping' | 'thing' | 'routine';
-	let { data, form }: { data: PageData; form?: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
 
 	let removedInboxItemIds = $state<string[]>([]);
 	let activeItemId = $state<string | null>(null);
 	let activeAction = $state<InboxAction | null>(null);
 	let pendingItemId = $state<string | null>(null);
 	let pendingMessage = $state('Updating inbox...');
+	let inboxError = $state('');
 	let savedItemId = $state<string | null>(null);
 	let hideServerSaved = $state(false);
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -78,31 +88,107 @@
 		}, 2000);
 	}
 
-	function inboxEnhance(message: string): SubmitFunction {
-		return ({ cancel, formData }) => {
-			if (pendingItemId) {
-				cancel();
-				return;
-			}
+	async function runInboxAction(
+		event: SubmitEvent,
+		message: string,
+		mutation: (formData: FormData, eventId: string) => Promise<void>
+	) {
+		event.preventDefault();
+		if (pendingItemId) return;
 
-			pendingItemId = String(formData.get('event_id') ?? '');
-			pendingMessage = message;
-			const endPendingWork = beginPendingWork();
+		const form = event.currentTarget;
+		if (!(form instanceof HTMLFormElement)) return;
 
-			return async ({ result, update }) => {
-				await update({ invalidateAll: false });
-				endPendingWork();
-				const finishedItemId = pendingItemId;
-				pendingItemId = null;
+		const formData = new FormData(form);
+		const eventId = String(formData.get('event_id') ?? '').trim();
+		if (!eventId) {
+			inboxError = 'Choose an inbox item first.';
+			return;
+		}
 
-				if (result.type === 'success' && finishedItemId) {
-					cancelAction();
-					removedInboxItemIds = [...removedInboxItemIds, finishedItemId];
-					flashSaved(finishedItemId);
-					await invalidate('homebrain:inbox-count');
-				}
-			};
-		};
+		pendingItemId = eventId;
+		pendingMessage = message;
+		inboxError = '';
+		const endPendingWork = beginPendingWork();
+
+		try {
+			await mutation(formData, eventId);
+			cancelAction();
+			removedInboxItemIds = [...removedInboxItemIds, eventId];
+			flashSaved(eventId);
+			refreshInboxCount();
+		} catch (error) {
+			inboxError = error instanceof Error ? error.message : 'The inbox item could not be updated.';
+		} finally {
+			endPendingWork();
+			pendingItemId = null;
+		}
+	}
+
+	async function markReviewed(_: FormData, eventId: string) {
+		const user = await requireUser();
+		await markNoteEventReviewed(getBrowserPb(), user.id, eventId);
+	}
+
+	async function dismissNote(_: FormData, eventId: string) {
+		const user = await requireUser();
+		await markNoteEventReviewed(getBrowserPb(), user.id, eventId, { dismissed: true });
+	}
+
+	async function linkThing(formData: FormData, eventId: string) {
+		const thingId = String(formData.get('thing_id') ?? '').trim();
+		if (!thingId) throw new Error('Choose a thing to link.');
+
+		const user = await requireUser();
+		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, thingId);
+	}
+
+	async function createRoutine(formData: FormData, eventId: string) {
+		const routineName = String(formData.get('routine_name') ?? '').trim();
+		const intervalValue = String(formData.get('interval_days') ?? '').trim();
+		const intervalDays = Number(intervalValue);
+
+		if (!routineName) throw new Error('Routine name is required.');
+		if (!intervalValue) throw new Error('Interval days is required.');
+		if (!Number.isInteger(intervalDays) || intervalDays <= 0) {
+			throw new Error('Interval days must be a positive whole number.');
+		}
+
+		const user = await requireUser();
+		await createRoutineFromNoteEvent(getBrowserPb(), user.id, eventId, intervalDays, routineName);
+	}
+
+	async function addToBuyList(formData: FormData, eventId: string) {
+		const itemName = String(formData.get('item_name') ?? '').trim();
+		const quantityText = String(formData.get('quantity_text') ?? '').trim();
+		if (!itemName) throw new Error('Item name is required.');
+
+		const user = await requireUser();
+		await addNoteEventToBuyList(getBrowserPb(), user.id, eventId, {
+			name: itemName,
+			...(quantityText ? { quantity_text: quantityText } : {})
+		});
+	}
+
+	async function logActivity(formData: FormData, eventId: string) {
+		const activityTypeValue = String(formData.get('activity_type') ?? 'other');
+		if (!activityTypeOptions.includes(activityTypeValue as ActivityType)) {
+			throw new Error('Choose a valid activity type.');
+		}
+
+		const durationValue = String(formData.get('duration_minutes') ?? '').trim();
+		const durationMinutes = Number(durationValue);
+		if (!durationValue || !Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+			throw new Error('Duration minutes must be a positive whole number.');
+		}
+
+		const notes = String(formData.get('notes') ?? '').trim();
+		const user = await requireUser();
+		await logNoteEventAsActivity(getBrowserPb(), user.id, eventId, {
+			activity_type: activityTypeValue as ActivityType,
+			duration_minutes: durationMinutes,
+			...(notes ? { notes } : {})
+		});
 	}
 </script>
 
@@ -118,9 +204,9 @@
 	<p>Review quick notes and decide what they are.</p>
 </section>
 
-{#if form?.inboxError}
+{#if inboxError}
 	<section class="panel">
-		<p class="notice error">{form.inboxError}</p>
+		<p class="notice error">{inboxError}</p>
 	</section>
 {/if}
 
@@ -142,15 +228,15 @@
 					<p class="plain-note">{editorText(item.notes)}</p>
 				{/if}
 
-				{#if savedItemId === item.id || (form?.eventId === item.id && form?.inboxSaved && !hideServerSaved)}
-					<p class="notice success">{form?.message ?? 'Saved'}</p>
+				{#if savedItemId === item.id && !hideServerSaved}
+					<p class="notice success">Saved</p>
 				{/if}
 
 				<div class="inbox-triage">
 					<p class="inbox-question">What is this?</p>
 
 					{#if isActionOpen(item.id, 'activity')}
-						<form method="POST" action="?/activity" class="inbox-action-panel" use:enhance={inboxEnhance('Logging activity...')}>
+					<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Logging activity...', logActivity)}>
 							<input type="hidden" name="event_id" value={item.id} />
 							<div class="inbox-form-grid">
 								<label>
@@ -175,7 +261,7 @@
 							</div>
 						</form>
 					{:else if isActionOpen(item.id, 'shopping')}
-						<form method="POST" action="?/shopping" class="inbox-action-panel" use:enhance={inboxEnhance('Adding to buy list...')}>
+						<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Adding to buy list...', addToBuyList)}>
 							<input type="hidden" name="event_id" value={item.id} />
 							<div class="inbox-form-grid">
 								<label>
@@ -196,7 +282,7 @@
 							</div>
 						</form>
 					{:else if isActionOpen(item.id, 'thing')}
-						<form method="POST" action="?/thing" class="inbox-action-panel" use:enhance={inboxEnhance('Linking to thing...')}>
+						<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Linking to thing...', linkThing)}>
 							<input type="hidden" name="event_id" value={item.id} />
 							{#if data.things.length}
 								<div class="inbox-form-grid">
@@ -229,7 +315,7 @@
 							</div>
 						</form>
 					{:else if isActionOpen(item.id, 'routine')}
-						<form method="POST" action="?/routine" class="inbox-action-panel" use:enhance={inboxEnhance('Creating routine...')}>
+						<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating routine...', createRoutine)}>
 							<input type="hidden" name="event_id" value={item.id} />
 							<div class="inbox-form-grid">
 								<label>
@@ -267,14 +353,14 @@
 								<Repeat size={16} />
 								Create routine
 							</button>
-							<form method="POST" action="?/reviewed" class="inbox-direct-form" use:enhance={inboxEnhance('Marking reviewed...')}>
+							<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Marking reviewed...', markReviewed)}>
 								<input type="hidden" name="event_id" value={item.id} />
 								<button class="secondary-action compact inbox-choice-button" type="submit" disabled={chooserDisabled(item.id)}>
 									<Check size={16} />
 									Just reviewed
 								</button>
 							</form>
-							<form method="POST" action="?/dismiss" class="inbox-direct-form" use:enhance={inboxEnhance('Dismissing...')}>
+							<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Dismissing...', dismissNote)}>
 								<input type="hidden" name="event_id" value={item.id} />
 								<button class="secondary-action compact inbox-choice-button" type="submit" disabled={chooserDisabled(item.id)}>
 									<X size={16} />

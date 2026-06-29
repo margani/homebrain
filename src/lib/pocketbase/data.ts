@@ -185,10 +185,10 @@ function nextDueFromInterval(intervalDays?: number) {
 	return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export async function listDueSoonRoutines(pb: PocketBase, limit = 6) {
+export async function listDueSoonRoutines(pb: PocketBase, userId: string, limit = 6) {
 	try {
 		const result = await pb.collection('routines').getList<RoutineRecord>(1, limit, {
-			filter: 'active = true && next_due_at != ""',
+			filter: pb.filter('user = {:userId} && active = true && next_due_at != ""', { userId }),
 			sort: 'next_due_at',
 			expand: 'thing'
 		});
@@ -196,7 +196,7 @@ export async function listDueSoonRoutines(pb: PocketBase, limit = 6) {
 		return result.items;
 	} catch {
 		const result = await pb.collection('routines').getList<RoutineRecord>(1, Math.max(limit, 50), {
-			filter: 'active = true',
+			filter: pb.filter('user = {:userId} && active = true', { userId }),
 			sort: 'next_due_at',
 			expand: 'thing'
 		});
@@ -205,9 +205,9 @@ export async function listDueSoonRoutines(pb: PocketBase, limit = 6) {
 	}
 }
 
-export async function listLowStockThings(pb: PocketBase, limit = 6) {
+export async function listLowStockThings(pb: PocketBase, userId: string, limit = 6) {
 	const result = await pb.collection('things').getList<ThingRecord>(1, limit, {
-		filter: 'status = "low" || status = "empty"',
+		filter: pb.filter('user = {:userId} && (status = "low" || status = "empty")', { userId }),
 		sort: 'status,name',
 		expand: 'location'
 	});
@@ -215,9 +215,9 @@ export async function listLowStockThings(pb: PocketBase, limit = 6) {
 	return result.items;
 }
 
-export async function listRecentNoteEvents(pb: PocketBase, limit = 6) {
+export async function listRecentNoteEvents(pb: PocketBase, userId: string, limit = 6) {
 	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
-		filter: 'event_type = "note"',
+		filter: pb.filter('user = {:userId} && event_type = "note"', { userId }),
 		sort: '-happened_at,-created',
 		expand: 'thing'
 	});
@@ -225,8 +225,9 @@ export async function listRecentNoteEvents(pb: PocketBase, limit = 6) {
 	return result.items;
 }
 
-export async function listRecentEvents(pb: PocketBase, limit = 12) {
+export async function listRecentEvents(pb: PocketBase, userId: string, limit = 12) {
 	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+		filter: pb.filter('user = {:userId}', { userId }),
 		sort: '-happened_at,-created',
 		expand: 'thing'
 	});
@@ -517,6 +518,7 @@ export async function logNoteEventAsActivity(
 
 export async function completeRoutine(pb: PocketBase, userId: string, routineId: string) {
 	const routine = await pb.collection('routines').getOne<RoutineRecord>(routineId);
+	if (routine.user !== userId) throw new Error('Routine does not belong to the current user.');
 	const now = new Date();
 	const nowIso = now.toISOString();
 	const intervalDays = Number(routine.interval_days);
@@ -589,18 +591,22 @@ export async function listThingMemoryEvents(
 	return result.items;
 }
 
-export async function listLocations(pb: PocketBase, limit = 100) {
+export async function listLocations(pb: PocketBase, userId: string, limit = 100) {
 	const result = await pb.collection('locations').getList<LocationRecord>(1, limit, {
+		filter: pb.filter('user = {:userId}', { userId }),
 		sort: 'path,name'
 	});
 
 	return result.items;
 }
 
-export async function getThing(pb: PocketBase, id: string) {
-	return await pb.collection('things').getOne<ThingRecord>(id, {
+export async function getThing(pb: PocketBase, id: string, userId?: string) {
+	const thing = await pb.collection('things').getOne<ThingRecord>(id, {
 		expand: 'location'
 	});
+	if (userId && thing.user !== userId) throw new Error('Thing does not belong to the current user.');
+
+	return thing;
 }
 
 export async function createLocation(pb: PocketBase, userId: string, input: LocationInput) {
@@ -876,7 +882,7 @@ export async function upsertPromptAnswer(
 	return await pb.collection('prompt_answers').create<PromptAnswerRecord>(payload);
 }
 
-export async function searchHomeBrain(pb: PocketBase, query: string) {
+export async function searchHomeBrain(pb: PocketBase, userId: string, query: string) {
 	const q = query.trim();
 	if (!q) {
 		return {
@@ -888,18 +894,22 @@ export async function searchHomeBrain(pb: PocketBase, query: string) {
 
 	const [things, locations, events] = await Promise.all([
 		pb.collection('things').getList<ThingRecord>(1, 12, {
-			filter: pb.filter('name ~ {:q} || notes ~ {:q} || quantity_text ~ {:q} || unit ~ {:q}', {
-				q
-			}),
+			filter: pb.filter(
+				'user = {:userId} && (name ~ {:q} || notes ~ {:q} || quantity_text ~ {:q} || unit ~ {:q})',
+				{ userId, q }
+			),
 			sort: 'name',
 			expand: 'location'
 		}),
 		pb.collection('locations').getList<LocationRecord>(1, 12, {
-			filter: pb.filter('name ~ {:q} || path ~ {:q} || notes ~ {:q}', { q }),
+			filter: pb.filter('user = {:userId} && (name ~ {:q} || path ~ {:q} || notes ~ {:q})', {
+				userId,
+				q
+			}),
 			sort: 'path,name'
 		}),
 		pb.collection('events').getList<EventRecord>(1, 12, {
-			filter: pb.filter('title ~ {:q} || notes ~ {:q}', { q }),
+			filter: pb.filter('user = {:userId} && (title ~ {:q} || notes ~ {:q})', { userId, q }),
 			sort: '-happened_at,-created',
 			expand: 'thing'
 		})

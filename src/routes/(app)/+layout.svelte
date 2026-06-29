@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { navigating, page } from '$app/state';
+	import { onMount } from 'svelte';
 	import {
 		Activity,
 		Brain,
@@ -16,11 +17,18 @@
 	} from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { displayName, initialsForUser } from '$lib/pocketbase/auth';
-	import { logout } from '$lib/pocketbase/client';
+	import {
+		authReady,
+		currentUser,
+		getBrowserPb,
+		inboxCountVersion,
+		initAuth,
+		logout
+	} from '$lib/pocketbase/client';
+	import { countUnreviewedNoteEvents } from '$lib/pocketbase/data';
 	import { hasPendingWork } from '$lib/ui/pending';
-	import type { LayoutData } from './$types';
 
-	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
+	let { children }: { children: import('svelte').Snippet } = $props();
 
 	const navItems = [
 		{ href: '/today', label: 'Today', icon: House },
@@ -38,8 +46,39 @@
 	);
 
 	let isLoggingOut = $state(false);
+	let inboxCount = $state(0);
 	const showTopLoading = $derived($hasPendingWork || navigating.type !== null || isLoggingOut);
 	const showPageLoading = $derived(navigating.type !== null && !$hasPendingWork && !isLoggingOut);
+
+	onMount(() => {
+		initAuth();
+	});
+
+	$effect(() => {
+		if (!$authReady) return;
+
+		if (!$currentUser) {
+			goto('/login', { replaceState: true });
+		}
+	});
+
+	$effect(() => {
+		const user = $currentUser;
+		const version = $inboxCountVersion;
+		if (!$authReady || !user) {
+			inboxCount = 0;
+			return;
+		}
+
+		void version;
+		countUnreviewedNoteEvents(getBrowserPb(), user.id)
+			.then((count) => {
+				inboxCount = count;
+			})
+			.catch(() => {
+				inboxCount = 0;
+			});
+	});
 
 	function isActive(href: string) {
 		const pathname = page.url.pathname;
@@ -55,7 +94,7 @@
 		isLoggingOut = true;
 
 		try {
-			await logout();
+			logout();
 			await goto('/login');
 		} finally {
 			isLoggingOut = false;
@@ -63,6 +102,15 @@
 	}
 </script>
 
+{#if !$authReady || !$currentUser}
+	<main class="login-page">
+		<section class="login-panel">
+			<p class="eyebrow">HomeBrain</p>
+			<h1>Loading</h1>
+			<p class="empty-state">Checking your PocketBase session...</p>
+		</section>
+	</main>
+{:else}
 <div class="app-shell">
 	<div class:active={showTopLoading} class="top-loading-bar" aria-hidden="true"></div>
 	<PendingOverlay active={isLoggingOut} message="Logging out..." global />
@@ -79,8 +127,8 @@
 			<a class:active={isActive(item.href)} href={item.href}>
 				<Icon size={19} />
 				<span>{item.label}</span>
-				{#if item.href === '/inbox' && data.inboxCount}
-					<span class="nav-badge">{data.inboxCount}</span>
+				{#if item.href === '/inbox' && inboxCount}
+					<span class="nav-badge">{inboxCount}</span>
 				{/if}
 			</a>
 		{/each}
@@ -88,14 +136,14 @@
 
 		<div class="sidebar-account">
 			<div class="account-card">
-				{#if data.user?.avatarUrl}
-					<img class="avatar" src={data.user.avatarUrl} alt="" />
+				{#if $currentUser?.avatarUrl}
+					<img class="avatar" src={$currentUser.avatarUrl} alt="" />
 				{:else}
-					<div class="avatar initials">{initialsForUser(data.user)}</div>
+					<div class="avatar initials">{initialsForUser($currentUser)}</div>
 				{/if}
 				<div class="account-text">
-					<strong>{displayName(data.user)}</strong>
-					<span>{data.user?.email}</span>
+					<strong>{displayName($currentUser)}</strong>
+					<span>{$currentUser?.email}</span>
 				</div>
 			</div>
 			<button class="ghost-action logout-action" type="button" onclick={handleLogout} disabled={isLoggingOut}>
@@ -146,10 +194,11 @@
 			<a class:active={isActive(item.href)} href={item.href}>
 				<Icon size={20} />
 				<span>{item.label}</span>
-				{#if item.href === '/inbox' && data.inboxCount}
-					<span class="nav-badge">{data.inboxCount}</span>
+				{#if item.href === '/inbox' && inboxCount}
+					<span class="nav-badge">{inboxCount}</span>
 				{/if}
 			</a>
 		{/each}
 	</nav>
 </div>
+{/if}

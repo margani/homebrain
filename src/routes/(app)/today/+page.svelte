@@ -1,7 +1,4 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { invalidate } from '$app/navigation';
-	import type { SubmitFunction } from '@sveltejs/kit';
 	import {
 		CalendarClock,
 		Check,
@@ -14,6 +11,12 @@
 	} from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import {
+		getBrowserPb,
+		refreshInboxCount,
+		requireUser
+	} from '$lib/pocketbase/client';
+	import { completeRoutine, createQuickCaptureNote } from '$lib/pocketbase/data';
+	import {
 		editorText,
 		firstNonEmptyLine,
 		formatDate,
@@ -21,12 +24,11 @@
 		labelFromValue
 	} from '$lib/pocketbase/format';
 	import { beginPendingWork } from '$lib/ui/pending';
-	import type { ActionData, PageData } from './$types';
+	import type { PageData } from './$types';
 
-	let { data, form }: { data: PageData; form?: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
 
 	type RecentNote = PageData['recentNotes'][number];
-	type CaptureResultData = { captureSaved?: boolean; note?: RecentNote };
 
 	const moodOptions = [
 		{ label: 'Good', icon: Smile },
@@ -42,6 +44,8 @@
 	let showCaptureSaved = $state(false);
 	let hideCaptureServerSaved = $state(false);
 	let hideDoneServerSaved = $state(false);
+	let captureError = $state('');
+	let doneError = $state('');
 	let doneSavedId = $state<string | null>(null);
 	let captureSavedTimer: ReturnType<typeof setTimeout> | undefined;
 	let doneSavedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -92,63 +96,63 @@
 		};
 	}
 
-	const captureEnhance: SubmitFunction = ({ cancel, formData }) => {
+	async function handleCaptureSubmit(event: SubmitEvent) {
+		event.preventDefault();
 		if (captureSubmitting) {
-			cancel();
 			return;
 		}
 
-		const text = String(formData.get('text') ?? '').trim();
+		captureError = '';
+		const text = captureText.trim();
+		if (!text) {
+			captureError = 'Add a note before saving.';
+			return;
+		}
+
 		const pendingNote = optimisticNote(text);
 		captureSubmitting = true;
 		captureText = '';
 		pendingRecentNotes = [pendingNote, ...pendingRecentNotes].slice(0, 6);
 		const endPendingWork = beginPendingWork();
 
-		return async ({ result, update }) => {
-			await update({ reset: false, invalidateAll: false });
+		try {
+			const user = await requireUser();
+			const savedNote = await createQuickCaptureNote(getBrowserPb(), user.id, text);
+			pendingRecentNotes = pendingRecentNotes.map((note) =>
+				note.id === pendingNote.id ? savedNote : note
+			);
+			flashCaptureSaved();
+			refreshInboxCount();
+		} catch (error) {
+			pendingRecentNotes = pendingRecentNotes.filter((note) => note.id !== pendingNote.id);
+			captureText = text;
+			captureError = error instanceof Error ? error.message : 'The note could not be saved.';
+		} finally {
 			endPendingWork();
 			captureSubmitting = false;
+		}
+	}
 
-			if (result.type === 'success') {
-				const savedNote = (result.data as CaptureResultData | undefined)?.note;
-				if (savedNote) {
-					pendingRecentNotes = pendingRecentNotes.map((note) =>
-						note.id === pendingNote.id ? savedNote : note
-					);
-				}
-				flashCaptureSaved();
-				await invalidate('homebrain:inbox-count');
-			} else {
-				pendingRecentNotes = pendingRecentNotes.filter((note) => note.id !== pendingNote.id);
-				captureText = text;
-			}
-		};
-	};
+	async function handleRoutineDone(event: SubmitEvent, routineId: string) {
+		event.preventDefault();
+		if (doneSubmittingId) return;
 
-	function routineDoneEnhance(routineId: string): SubmitFunction {
-		return ({ cancel }) => {
-			if (doneSubmittingId) {
-				cancel();
-				return;
-			}
+		doneError = '';
+		doneSubmittingId = routineId;
+		hiddenDoneRoutineIds = [...hiddenDoneRoutineIds, routineId];
+		const endPendingWork = beginPendingWork();
 
-			doneSubmittingId = routineId;
-			hiddenDoneRoutineIds = [...hiddenDoneRoutineIds, routineId];
-			const endPendingWork = beginPendingWork();
-
-			return async ({ result, update }) => {
-				await update({ invalidateAll: false });
-				endPendingWork();
-				doneSubmittingId = null;
-
-				if (result.type === 'success') {
-					flashDone(routineId);
-				} else {
-					hiddenDoneRoutineIds = hiddenDoneRoutineIds.filter((id) => id !== routineId);
-				}
-			};
-		};
+		try {
+			const user = await requireUser();
+			await completeRoutine(getBrowserPb(), user.id, routineId);
+			flashDone(routineId);
+		} catch (error) {
+			hiddenDoneRoutineIds = hiddenDoneRoutineIds.filter((id) => id !== routineId);
+			doneError = error instanceof Error ? error.message : 'The routine could not be marked done.';
+		} finally {
+			endPendingWork();
+			doneSubmittingId = null;
+		}
 	}
 </script>
 
@@ -193,7 +197,7 @@
 			</div>
 			<span class="soft-icon"><Plus size={20} /></span>
 		</div>
-		<form method="POST" action="?/capture" class="capture-form" use:enhance={captureEnhance}>
+		<form method="POST" class="capture-form" onsubmit={handleCaptureSubmit}>
 			<textarea
 				name="text"
 				rows="6"
@@ -202,10 +206,10 @@
 				required
 			></textarea>
 			<div class="form-footer">
-				{#if showCaptureSaved || (form?.captureSaved && !hideCaptureServerSaved)}
+				{#if showCaptureSaved && !hideCaptureServerSaved}
 					<p class="notice success">Saved</p>
-				{:else if form?.captureError}
-					<p class="notice error">{form.captureError}</p>
+				{:else if captureError}
+					<p class="notice error">{captureError}</p>
 				{:else}
 					<p class="hint">Stored as an event note with the current time.</p>
 				{/if}
@@ -229,10 +233,10 @@
 			</div>
 			<span class="soft-icon"><CalendarClock size={20} /></span>
 		</div>
-		{#if form?.doneSaved && !hideDoneServerSaved}
+		{#if doneSavedId && !hideDoneServerSaved}
 			<p class="notice success">Done</p>
-		{:else if form?.doneError}
-			<p class="notice error">{form.doneError}</p>
+		{:else if doneError}
+			<p class="notice error">{doneError}</p>
 		{/if}
 		{#if dueSoon.length}
 			<ul class="record-list">
@@ -251,7 +255,7 @@
 						</div>
 						<div class="routine-actions">
 							<time datetime={routine.next_due_at}>{formatDate(routine.next_due_at)}</time>
-							<form method="POST" action="?/done" use:enhance={routineDoneEnhance(routine.id)}>
+							<form method="POST" onsubmit={(event) => handleRoutineDone(event, routine.id)}>
 								<input type="hidden" name="routine_id" value={routine.id} />
 								<button
 									class="secondary-action compact routine-done-action"

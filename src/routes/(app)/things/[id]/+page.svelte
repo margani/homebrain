@@ -1,21 +1,18 @@
 <script lang="ts">
 	import { Activity, Boxes, NotebookText } from 'lucide-svelte';
 	import ThingForm from '$lib/components/ThingForm.svelte';
+	import { getBrowserPb, requireUser } from '$lib/pocketbase/client';
+	import { createLocation, updateThing } from '$lib/pocketbase/data';
 	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
+	import type { ParsedThingForm } from '$lib/pocketbase/forms';
 	import type { JsonValue } from '$lib/pocketbase/types';
-	import type { ActionData, PageData } from './$types';
+	import type { PageData } from './$types';
 
-	let { data, form }: { data: PageData; form?: ActionData } = $props();
-
-	type ThingActionResult = ActionData & {
-		thing?: PageData['thing'];
-		location?: PageData['locations'][number];
-	};
+	let { data }: { data: PageData } = $props();
 
 	let localThing = $state<PageData['thing'] | null>(null);
 	let localLocations = $state<PageData['locations']>([]);
 
-	const actionResult = $derived(form as ThingActionResult | undefined);
 	const thing = $derived(localThing?.id === data.thing.id ? localThing : data.thing);
 	const locations = $derived(
 		[...localLocations, ...data.locations]
@@ -56,18 +53,21 @@
 		return '';
 	}
 
-	$effect(() => {
-		if (actionResult?.thingSaved && actionResult.thing) {
-			localThing = actionResult.thing;
-		}
+	async function saveThing(parsed: ParsedThingForm) {
+		const user = await requireUser();
+		const pb = getBrowserPb();
 
-		if (actionResult?.location) {
+		if (parsed.newLocation) {
+			const location = await createLocation(pb, user.id, parsed.newLocation);
+			parsed.thing.location = location.id;
 			localLocations = [
-				actionResult.location,
-				...locations.filter((location) => location.id !== actionResult.location?.id)
+				location,
+				...locations.filter((item) => item.id !== location.id)
 			].sort((a, b) => (a.path || a.name || '').localeCompare(b.path || b.name || ''));
 		}
-	});
+
+		localThing = await updateThing(pb, thing.id, parsed.thing);
+	}
 </script>
 
 <svelte:head>
@@ -176,7 +176,7 @@
 		<ThingForm
 			thing={thing}
 			locations={locations}
-			{form}
+			onSave={saveThing}
 			submitLabel="Save changes"
 			pendingLabel="Updating..."
 			pendingMessage="Updating thing..."

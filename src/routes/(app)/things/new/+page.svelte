@@ -1,8 +1,25 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import ThingForm from '$lib/components/ThingForm.svelte';
-	import type { ActionData, PageData } from './$types';
+	import { getBrowserPb, requireUser } from '$lib/pocketbase/client';
+	import { createLocation, createThing } from '$lib/pocketbase/data';
+	import type { ParsedThingForm } from '$lib/pocketbase/forms';
+	import type { PageData } from './$types';
 
-	let { data, form }: { data: PageData; form?: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
+
+	async function saveThing(parsed: ParsedThingForm) {
+		const user = await requireUser();
+		const pb = getBrowserPb();
+
+		if (parsed.newLocation) {
+			const location = await createLocation(pb, user.id, parsed.newLocation);
+			parsed.thing.location = location.id;
+		}
+
+		const thing = await createThing(pb, user.id, parsed.thing);
+		await goto(`/things/${thing.id}`);
+	}
 </script>
 
 <svelte:head>
@@ -20,7 +37,7 @@
 <section class="panel">
 	<ThingForm
 		locations={data.locations}
-		{form}
+		onSave={saveThing}
 		submitLabel="Create thing"
 		pendingLabel="Creating..."
 		pendingMessage="Creating thing..."

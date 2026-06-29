@@ -8,9 +8,10 @@ import {
 	listTodayPromptAnswers,
 	localDateKey
 } from '$lib/pocketbase/data';
+import { loadUserAndPb } from '$lib/pocketbase/load';
 
-export async function load({ locals }) {
-	const userId = locals.user!.id;
+export async function load() {
+	const { pb, user } = await loadUserAndPb();
 	const dateKey = localDateKey();
 
 	const [
@@ -22,13 +23,13 @@ export async function load({ locals }) {
 		buyList,
 		reflectionAnswers
 	] = await Promise.all([
-		countReviewInboxNotes(locals.pb, userId),
-		listDashboardRecentNotes(locals.pb, userId),
-		listRecentlyLinkedMemoryEvents(locals.pb, userId),
-		listActiveThingSummaries(locals.pb, userId),
-		listDashboardDueRoutines(locals.pb, userId),
-		listDashboardBuyList(locals.pb, userId),
-		listTodayPromptAnswers(locals.pb, userId, dateKey)
+		countReviewInboxNotes(pb, user.id),
+		listDashboardRecentNotes(pb, user.id),
+		listRecentlyLinkedMemoryEvents(pb, user.id),
+		listActiveThingSummaries(pb, user.id),
+		listDashboardDueRoutines(pb, user.id),
+		listDashboardBuyList(pb, user.id),
+		listTodayPromptAnswers(pb, user.id, dateKey)
 	]);
 
 	const answeredPromptCount = reflectionAnswers.filter((answer) => answer.answer?.trim()).length;

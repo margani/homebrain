@@ -1,7 +1,7 @@
-import { env } from '$env/dynamic/public';
+import { PUBLIC_POCKETBASE_URL } from '$env/static/public';
 
 export function getPocketBaseUrl() {
-	return env.PUBLIC_POCKETBASE_URL?.trim() ?? '';
+	return PUBLIC_POCKETBASE_URL.trim();
 }
 
 export function isPocketBaseConfigured() {

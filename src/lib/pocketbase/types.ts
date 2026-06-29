@@ -39,9 +39,27 @@ export const thingStatusOptions: ThingStatus[] = [
 	'unknown'
 ];
 
+export type ActivityType =
+	| 'walking'
+	| 'strength'
+	| 'cycling'
+	| 'swimming'
+	| 'stretching'
+	| 'other';
+
+export const activityTypeOptions: ActivityType[] = [
+	'walking',
+	'strength',
+	'cycling',
+	'swimming',
+	'stretching',
+	'other'
+];
+
 export type EventType =
 	| 'mood'
 	| 'note'
+	| 'activity'
 	| 'created'
 	| 'done'
 	| 'bought'

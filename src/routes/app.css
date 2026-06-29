@@ -1059,6 +1059,19 @@ label > select:focus,
 	min-width: 150px;
 }
 
+.activity-form {
+	flex: 1 1 520px;
+}
+
+.activity-notes-field {
+	flex: 1 1 220px;
+}
+
+.activity-notes-field textarea {
+	min-height: 46px;
+	padding-block: 10px;
+}
+
 .empty-inbox {
 	display: flex;
 	align-items: center;

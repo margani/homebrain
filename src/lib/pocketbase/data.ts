@@ -1,6 +1,7 @@
 import type PocketBase from 'pocketbase';
 import { firstNonEmptyLine } from './format';
 import type {
+	ActivityType,
 	EventRecord,
 	JsonValue,
 	LocationRecord,
@@ -37,6 +38,12 @@ export interface RoutineInput {
 	next_due_at?: string;
 	active?: boolean;
 	metadata?: JsonValue;
+}
+
+export interface ActivityLogInput {
+	activity_type: ActivityType;
+	duration_minutes: number;
+	notes?: string;
 }
 
 export interface ActiveThingSummary {
@@ -345,6 +352,33 @@ export async function markNoteEventProcessed(
 			...metadata
 		}
 	});
+}
+
+export async function logNoteEventAsActivity(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	input: ActivityLogInput
+) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+	if (event.event_type !== 'note') throw new Error('Only note events can be logged as activities.');
+
+	const payload: Partial<EventRecord> = {
+		event_type: 'activity',
+		metadata: {
+			...recordMetadata(event),
+			reviewed: true,
+			activity_type: input.activity_type,
+			duration_minutes: input.duration_minutes
+		}
+	};
+
+	if (input.notes !== undefined) {
+		payload.notes = input.notes;
+	}
+
+	return await pb.collection('events').update<EventRecord>(eventId, payload);
 }
 
 export async function completeRoutine(pb: PocketBase, userId: string, routineId: string) {

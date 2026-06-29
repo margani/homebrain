@@ -4,9 +4,17 @@ import {
 	convertNoteEventToShopping,
 	convertNoteEventToThing,
 	listUnprocessedNoteEvents,
+	logNoteEventAsActivity,
 	markNoteEventProcessed
 } from '$lib/pocketbase/data';
-import { thingStatusOptions, thingTypeOptions, type ThingStatus, type ThingType } from '$lib/pocketbase/types';
+import {
+	activityTypeOptions,
+	thingStatusOptions,
+	thingTypeOptions,
+	type ActivityType,
+	type ThingStatus,
+	type ThingType
+} from '$lib/pocketbase/types';
 import type { Actions } from './$types';
 
 export async function load({ locals }) {
@@ -106,5 +114,43 @@ export const actions = {
 		}
 
 		return { inboxSaved: true, eventId: id, message: 'Added to buy list' };
+	},
+	activity: async ({ locals, request }) => {
+		const formData = await request.formData();
+		const id = requireEventId(formData);
+		if (!locals.user) return fail(401, { inboxError: 'Sign in again before logging activity.' });
+		if (!id) return fail(400, { inboxError: 'Choose an inbox item first.' });
+
+		const activityTypeValue = String(formData.get('activity_type') ?? 'other');
+		if (!activityTypeOptions.includes(activityTypeValue as ActivityType)) {
+			return fail(400, { inboxError: 'Choose a valid activity type.', eventId: id });
+		}
+
+		const durationValue = String(formData.get('duration_minutes') ?? '').trim();
+		const durationMinutes = Number(durationValue);
+		if (
+			!durationValue ||
+			!Number.isInteger(durationMinutes) ||
+			Number(durationMinutes) <= 0
+		) {
+			return fail(400, {
+				inboxError: 'Duration minutes must be a positive whole number.',
+				eventId: id
+			});
+		}
+
+		const notes = String(formData.get('notes') ?? '').trim();
+
+		try {
+			await logNoteEventAsActivity(locals.pb, locals.user.id, id, {
+				activity_type: activityTypeValue as ActivityType,
+				duration_minutes: durationMinutes,
+				...(notes ? { notes } : {})
+			});
+		} catch {
+			return fail(500, { inboxError: 'The item could not be logged as an activity.' });
+		}
+
+		return { inboxSaved: true, eventId: id, message: 'Logged as activity' };
 	}
 } satisfies Actions;

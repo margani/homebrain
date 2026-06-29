@@ -457,6 +457,7 @@
         "values": [
           "mood",
           "note",
+          "activity",
           "created",
           "done",
           "bought",

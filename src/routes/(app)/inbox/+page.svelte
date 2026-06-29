@@ -2,10 +2,10 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { Archive, Boxes, Check, Repeat, ShoppingBasket, X } from 'lucide-svelte';
+	import { Activity, Archive, Boxes, Check, Repeat, ShoppingBasket, X } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { editorText, firstNonEmptyLine, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
-	import { thingStatusOptions, thingTypeOptions } from '$lib/pocketbase/types';
+	import { activityTypeOptions, thingStatusOptions, thingTypeOptions } from '$lib/pocketbase/types';
 	import { beginPendingWork } from '$lib/ui/pending';
 	import type { ActionData, PageData } from './$types';
 
@@ -149,6 +149,30 @@
 						<button class="secondary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
 							<Repeat size={16} />
 							Convert to Routine
+						</button>
+					</form>
+
+					<form method="POST" action="?/activity" class="inbox-convert-form activity-form" use:enhance={inboxEnhance('Logging activity...')}>
+						<input type="hidden" name="event_id" value={item.id} />
+						<label>
+							Activity
+							<select name="activity_type">
+								{#each activityTypeOptions as type}
+									<option value={type}>{labelFromValue(type)}</option>
+								{/each}
+							</select>
+						</label>
+						<label>
+							Minutes
+							<input name="duration_minutes" type="number" min="1" step="1" placeholder="30" required />
+						</label>
+						<label class="activity-notes-field">
+							Notes
+							<textarea name="notes" rows="2" placeholder="Leave blank to keep existing notes"></textarea>
+						</label>
+						<button class="secondary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+							<Activity size={16} />
+							Log as Activity
 						</button>
 					</form>
 

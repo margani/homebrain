@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import PocketBase from 'pocketbase';
+import PocketBase, { ClientResponseError } from 'pocketbase';
 import { get } from 'svelte/store';
 import { derived, writable } from 'svelte/store';
 import { toAuthUser } from './auth';
@@ -27,6 +27,17 @@ export const isAuthenticated = derived(currentUser, ($currentUser) => Boolean($c
 
 function setUserFromStore(pb: PocketBase) {
 	currentUser.set(toAuthUser(pb.authStore.record, pb));
+}
+
+function shouldClearAuthOnRefreshError(error: unknown) {
+	return error instanceof ClientResponseError && (error.status === 401 || error.status === 403);
+}
+
+function logAuthRefreshError(error: unknown) {
+	if (!import.meta.env.DEV) return;
+
+	const message = error instanceof Error ? error.message : String(error);
+	console.warn('PocketBase auth refresh failed without clearing the local session.', message);
 }
 
 function oauthRedirectURL() {
@@ -83,8 +94,12 @@ export async function syncAuthFromStore(refresh = false) {
 	if (refresh && pb.authStore.isValid) {
 		try {
 			await pb.collection('users').authRefresh<UserRecord>();
-		} catch {
-			pb.authStore.clear();
+		} catch (error) {
+			if (shouldClearAuthOnRefreshError(error)) {
+				pb.authStore.clear();
+			} else {
+				logAuthRefreshError(error);
+			}
 		}
 	}
 
@@ -115,8 +130,12 @@ export async function initAuth() {
 		if (pb.authStore.isValid) {
 			try {
 				await pb.collection('users').authRefresh<UserRecord>();
-			} catch {
-				pb.authStore.clear();
+			} catch (error) {
+				if (shouldClearAuthOnRefreshError(error)) {
+					pb.authStore.clear();
+				} else {
+					logAuthRefreshError(error);
+				}
 			}
 		}
 

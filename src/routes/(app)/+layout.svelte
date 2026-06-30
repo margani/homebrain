@@ -25,7 +25,7 @@
 		initAuth,
 		logout
 	} from '$lib/pocketbase/client';
-	import { countUnreviewedNoteEvents } from '$lib/pocketbase/data';
+	import { getCachedInboxCount, sharedInboxCount } from '$lib/pocketbase/data';
 	import { hasPendingWork } from '$lib/ui/pending';
 
 	let { children }: { children: import('svelte').Snippet } = $props();
@@ -65,13 +65,19 @@
 	$effect(() => {
 		const user = $currentUser;
 		const version = $inboxCountVersion;
+		const cachedCount = $sharedInboxCount;
 		if (!$authReady || !user) {
 			inboxCount = 0;
 			return;
 		}
 
 		void version;
-		countUnreviewedNoteEvents(getBrowserPb(), user.id)
+		if (cachedCount !== null) {
+			inboxCount = cachedCount;
+			return;
+		}
+
+		getCachedInboxCount(getBrowserPb(), user.id)
 			.then((count) => {
 				inboxCount = count;
 			})

@@ -8,7 +8,7 @@ export async function load({ params }) {
 	try {
 		const [note, things] = await Promise.all([
 			getNoteArchiveEvent(pb, user.id, params.id),
-			listUserThings(pb, user.id)
+			listUserThings(pb, user.id, 0)
 		]);
 
 		return {

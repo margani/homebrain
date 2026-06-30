@@ -1,4 +1,5 @@
 import type PocketBase from 'pocketbase';
+import { writable } from 'svelte/store';
 import { firstNonEmptyLine } from './format';
 import type {
 	ActivityType,
@@ -70,6 +71,46 @@ export interface ActiveThingSummary {
 	status?: ThingStatus;
 	linkedEventCount: number;
 	latestActivity: string;
+}
+
+const shortCacheTtlMs = 30_000;
+
+interface CacheEntry<T> {
+	userId: string;
+	value: T;
+	updatedAt: number;
+}
+
+export const sharedInboxCount = writable<number | null>(null);
+
+let inboxCountCache: CacheEntry<number> | null = null;
+let thingsCache: CacheEntry<ThingRecord[]> | null = null;
+let noteArchiveCache: CacheEntry<EventRecord[]> | null = null;
+
+function isFreshCache<T>(cache: CacheEntry<T> | null, userId: string) {
+	return Boolean(
+		cache && cache.userId === userId && Date.now() - cache.updatedAt < shortCacheTtlMs
+	);
+}
+
+export function seedInboxCountCache(userId: string, count: number) {
+	inboxCountCache = { userId, value: count, updatedAt: Date.now() };
+	sharedInboxCount.set(count);
+}
+
+export function invalidateInboxCountCache() {
+	inboxCountCache = null;
+	sharedInboxCount.set(null);
+}
+
+export function invalidateThingsCache() {
+	thingsCache = null;
+}
+
+export function invalidateNoteArchiveCache() {
+	noteArchiveCache = null;
+	// Reviewed/activity changes affect both the archive pages and the sidebar inbox badge.
+	invalidateInboxCountCache();
 }
 
 const reflectionPromptTypes = [
@@ -240,6 +281,16 @@ export async function listNoteArchiveEvents(
 	userId: string,
 	filter: NoteArchiveFilter = 'all'
 ) {
+	const events = await listCachedNoteArchiveEvents(pb, userId);
+
+	return events.filter((event) => matchesNoteArchiveFilter(event, filter));
+}
+
+export async function listCachedNoteArchiveEvents(pb: PocketBase, userId: string) {
+	if (isFreshCache(noteArchiveCache, userId)) {
+		return noteArchiveCache!.value;
+	}
+
 	const events = await pb.collection('events').getFullList<EventRecord>({
 		filter: pb.filter('user = {:userId} && (event_type = "note" || event_type = "activity")', {
 			userId
@@ -248,7 +299,8 @@ export async function listNoteArchiveEvents(
 		expand: 'thing'
 	});
 
-	return events.filter((event) => matchesNoteArchiveFilter(event, filter));
+	noteArchiveCache = { userId, value: events, updatedAt: Date.now() };
+	return events;
 }
 
 export async function listUnreviewedNoteEvents(pb: PocketBase, userId: string, limit = 50) {
@@ -288,7 +340,7 @@ export async function getNoteArchiveEvent(pb: PocketBase, userId: string, eventI
 }
 
 export async function countUnreviewedNoteEvents(pb: PocketBase, userId: string) {
-	return (await listUnreviewedNoteEvents(pb, userId, 100)).length;
+	return await getCachedInboxCount(pb, userId);
 }
 
 export async function countReviewInboxNotes(pb: PocketBase, userId: string) {
@@ -312,6 +364,17 @@ export async function countReviewInboxNotes(pb: PocketBase, userId: string) {
 			return metadata.reviewed !== true && metadata.processed !== true;
 		}).length;
 	}
+}
+
+export async function getCachedInboxCount(pb: PocketBase, userId: string) {
+	if (isFreshCache(inboxCountCache, userId)) {
+		sharedInboxCount.set(inboxCountCache!.value);
+		return inboxCountCache!.value;
+	}
+
+	const count = await countReviewInboxNotes(pb, userId);
+	seedInboxCountCache(userId, count);
+	return count;
 }
 
 export async function listDashboardRecentNotes(pb: PocketBase, userId: string, limit = 10) {
@@ -349,6 +412,12 @@ export async function listRecentlyLinkedMemoryEvents(pb: PocketBase, userId: str
 }
 
 export async function listActivityEvents(pb: PocketBase, userId: string, limit = 100) {
+	if (limit <= 0 || limit === 100) {
+		const archiveEvents = await listCachedNoteArchiveEvents(pb, userId);
+		const activities = archiveEvents.filter((event) => event.event_type === 'activity');
+		return limit <= 0 ? activities : activities.slice(0, limit);
+	}
+
 	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
 		filter: pb.filter('user = {:userId} && event_type = "activity"', { userId }),
 		sort: '-happened_at,-created',
@@ -427,13 +496,15 @@ export async function createQuickCaptureNote(pb: PocketBase, userId: string, tex
 	const trimmed = text.trim();
 	const title = firstNonEmptyLine(trimmed) ?? 'Untitled note';
 
-	return await pb.collection('events').create<EventRecord>({
+	const note = await pb.collection('events').create<EventRecord>({
 		user: userId,
 		event_type: 'note',
 		title,
 		notes: trimmed,
 		happened_at: new Date().toISOString()
 	});
+	invalidateNoteArchiveCache();
+	return note;
 }
 
 export async function markNoteEventReviewed(
@@ -451,9 +522,11 @@ export async function markNoteEventReviewed(
 	};
 	delete nextMetadata.processed;
 
-	return await pb.collection('events').update<EventRecord>(eventId, {
+	const updated = await pb.collection('events').update<EventRecord>(eventId, {
 		metadata: nextMetadata
 	});
+	invalidateNoteArchiveCache();
+	return updated;
 }
 
 export async function setNoteEventReviewState(
@@ -479,11 +552,13 @@ export async function setNoteEventReviewState(
 		metadata.dismissed = false;
 	}
 
-	return await pb.collection('events').update<EventRecord>(
+	const updated = await pb.collection('events').update<EventRecord>(
 		eventId,
 		{ metadata },
 		{ expand: 'thing' }
 	);
+	invalidateNoteArchiveCache();
+	return updated;
 }
 
 export async function logNoteEventAsActivity(
@@ -513,7 +588,9 @@ export async function logNoteEventAsActivity(
 		payload.notes = input.notes;
 	}
 
-	return await pb.collection('events').update<EventRecord>(eventId, payload);
+	const updated = await pb.collection('events').update<EventRecord>(eventId, payload);
+	invalidateNoteArchiveCache();
+	return updated;
 }
 
 export async function completeRoutine(pb: PocketBase, userId: string, routineId: string) {
@@ -557,11 +634,21 @@ export async function listThings(pb: PocketBase, limit = 50) {
 
 export async function listUserThings(pb: PocketBase, userId: string, limit = 200) {
 	if (limit <= 0) {
-		return await pb.collection('things').getFullList<ThingRecord>({
+		if (isFreshCache(thingsCache, userId)) {
+			return thingsCache!.value;
+		}
+
+		const things = await pb.collection('things').getFullList<ThingRecord>({
 			filter: pb.filter('user = {:userId}', { userId }),
 			sort: 'name',
 			expand: 'location'
 		});
+		thingsCache = { userId, value: things, updatedAt: Date.now() };
+		return things;
+	}
+
+	if (isFreshCache(thingsCache, userId)) {
+		return thingsCache!.value.slice(0, limit);
 	}
 
 	const result = await pb.collection('things').getList<ThingRecord>(1, limit, {
@@ -634,13 +721,17 @@ function toThingPayload(userId: string | null, input: ThingInput) {
 }
 
 export async function createThing(pb: PocketBase, userId: string, input: ThingInput) {
-	return await pb.collection('things').create<ThingRecord>(toThingPayload(userId, input));
+	const thing = await pb.collection('things').create<ThingRecord>(toThingPayload(userId, input));
+	invalidateThingsCache();
+	return thing;
 }
 
 export async function updateThing(pb: PocketBase, id: string, input: ThingInput) {
-	return await pb.collection('things').update<ThingRecord>(id, toThingPayload(null, input), {
+	const thing = await pb.collection('things').update<ThingRecord>(id, toThingPayload(null, input), {
 		expand: 'location'
 	});
+	invalidateThingsCache();
+	return thing;
 }
 
 export async function createRoutine(pb: PocketBase, userId: string, input: RoutineInput) {
@@ -676,10 +767,12 @@ export async function linkMemoryEventToThing(
 	};
 	delete metadata.processed;
 
-	return await pb.collection('events').update<EventRecord>(eventId, {
+	const updated = await pb.collection('events').update<EventRecord>(eventId, {
 		thing: thingId,
 		metadata
 	});
+	invalidateNoteArchiveCache();
+	return updated;
 }
 
 export async function createThingFromNoteEvent(

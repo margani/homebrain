@@ -4,6 +4,7 @@ import { get } from 'svelte/store';
 import { derived, writable } from 'svelte/store';
 import { toAuthUser } from './auth';
 import { getPocketBaseUrl, isPocketBaseConfigured } from './config';
+import { invalidateInboxCountCache } from './data';
 import type { AuthUser, UserRecord } from './types';
 
 let client: PocketBase | null = null;
@@ -254,5 +255,6 @@ export function logout() {
 }
 
 export function refreshInboxCount() {
+	invalidateInboxCountCache();
 	inboxCountVersion.update((version) => version + 1);
 }

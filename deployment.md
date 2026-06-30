@@ -5,8 +5,8 @@ HomeBrain deploys as a static frontend to PocketHost/PocketBase `pb_public`. The
 ## Production Domains
 
 - Frontend: `https://home.whosane.dev`
-- PocketBase backend: `https://db.home.whosane.dev`
-- Public environment variable: `PUBLIC_POCKETBASE_URL=https://db.home.whosane.dev`
+- PocketBase backend: `https://home.whosane.dev`
+- Public environment variable: `PUBLIC_POCKETBASE_URL=https://home.whosane.dev`
 
 ## Why phio
 
@@ -122,7 +122,7 @@ The workflow also sets `PHIO_INSTANCE_NAME` from the same secret for phio's CI e
 
 ## PocketBase CORS
 
-Configure the PocketBase backend at `https://db.home.whosane.dev`.
+Configure the PocketBase backend at `https://home.whosane.dev`.
 
 Allowed origins:
 
@@ -151,7 +151,7 @@ https://home.whosane.dev
 Authorized redirect URI:
 
 ```text
-https://db.home.whosane.dev/api/oauth2-redirect
+https://home.whosane.dev/api/oauth2-redirect
 ```
 
 The OAuth redirect URI points to PocketBase, not the static frontend.

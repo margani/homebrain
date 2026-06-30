@@ -44,5 +44,5 @@ http://localhost:5173
 PocketBase OAuth redirect URI:
 
 ```text
-https://db.home.whosane.dev/api/oauth2-redirect
+https://home.whosane.dev/api/oauth2-redirect
 ```

@@ -41,7 +41,7 @@ PocketBase should have Google OAuth and email/password auth enabled on the `user
 npm run dev
 ```
 
-The development origin `http://localhost:5173` must be allowed in PocketBase CORS settings.
+The development origin `http://localhost:5173` must be allowed in PocketBase CORS settings. For local Google OAuth testing, add `http://localhost:5173` as an Authorized JavaScript origin and `http://localhost:5173/oauth2-redirect` as an Authorized redirect URI.
 
 ## Static Build
 

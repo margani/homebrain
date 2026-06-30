@@ -142,7 +142,7 @@ email/password auth enabled if you want the fallback login form
 
 ## Google OAuth
 
-Configure Google OAuth for the production frontend and PocketBase redirect.
+Configure Google OAuth for the production frontend and redirect sign-in flow.
 
 Authorized JavaScript origin:
 
@@ -153,10 +153,17 @@ https://home.whosane.dev
 Authorized redirect URI:
 
 ```text
-https://home.whosane.dev/api/oauth2-redirect
+https://home.whosane.dev/oauth2-redirect
 ```
 
-The OAuth redirect URI points to PocketBase on the same origin that serves the static frontend.
+For local testing, also add:
+
+```text
+http://localhost:5173
+http://localhost:5173/oauth2-redirect
+```
+
+The app uses PocketBase `authWithOAuth2Code()` with the SPA callback route above. The older generic PocketBase popup flow uses `/api/oauth2-redirect`, but HomeBrain's redirect sign-in flow now uses `/oauth2-redirect`.
 
 ## Smoke Test
 

@@ -8,16 +8,33 @@
 		initAuth,
 		loginWithGoogle,
 		loginWithPassword,
-		pbConfigured
+		pbConfigured,
+		syncAuthFromStore
 	} from '$lib/pocketbase/client';
 
 	let email = $state('');
 	let password = $state('');
 	let errorMessage = $state('');
 	let busy = $state(false);
+	let syncingAuth = false;
 
 	onMount(() => {
-		initAuth();
+		void initAuth();
+
+		const handleAuthReturn = () => {
+			void finishAuthReturn();
+		};
+		const handleVisibilityChange = () => {
+			if (!document.hidden) handleAuthReturn();
+		};
+
+		window.addEventListener('focus', handleAuthReturn);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+
+		return () => {
+			window.removeEventListener('focus', handleAuthReturn);
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+		};
 	});
 
 	$effect(() => {
@@ -26,16 +43,31 @@
 		}
 	});
 
+	async function finishAuthReturn() {
+		if (syncingAuth || !$pbConfigured) return;
+
+		syncingAuth = true;
+
+		try {
+			const user = await syncAuthFromStore();
+			if (user) {
+				await goto('/today', { replaceState: true });
+			} else if (busy) {
+				busy = false;
+			}
+		} finally {
+			syncingAuth = false;
+		}
+	}
+
 	async function handleGoogleLogin() {
 		errorMessage = '';
 		busy = true;
 
 		try {
 			await loginWithGoogle();
-			await goto('/today');
 		} catch (error) {
 			errorMessage = error instanceof Error ? error.message : 'Google sign-in failed.';
-		} finally {
 			busy = false;
 		}
 	}

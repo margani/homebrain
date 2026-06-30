@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PHIO_HOME: '${{ runner.temp }}/phio-home'
       PUBLIC_POCKETBASE_URL: 'https://db.home.whosane.dev'
       PUBLIC_REPOSITORY_URL: 'https://github.com/${{ github.repository }}'
       PUBLIC_GIT_COMMIT: '${{ github.sha }}'
@@ -65,11 +64,13 @@ jobs:
 
           : "${PHIO_DEPLOY_PRIVATE_KEY:?Missing PHIO_DEPLOY_PRIVATE_KEY secret}"
 
-          install -m 700 -d "$PHIO_HOME"
-          printf '%s\n' "$PHIO_DEPLOY_PRIVATE_KEY" | tr -d '\r' > "$PHIO_HOME/phio_deploy_ed25519"
-          chmod 600 "$PHIO_HOME/phio_deploy_ed25519"
-          ssh-keygen -y -f "$PHIO_HOME/phio_deploy_ed25519" > "$PHIO_HOME/phio_deploy_ed25519.pub"
-          chmod 644 "$PHIO_HOME/phio_deploy_ed25519.pub"
+          phio_home="$RUNNER_TEMP/phio-home"
+          echo "PHIO_HOME=$phio_home" >> "$GITHUB_ENV"
+          install -m 700 -d "$phio_home"
+          printf '%s\n' "$PHIO_DEPLOY_PRIVATE_KEY" | tr -d '\r' > "$phio_home/phio_deploy_ed25519"
+          chmod 600 "$phio_home/phio_deploy_ed25519"
+          ssh-keygen -y -f "$phio_home/phio_deploy_ed25519" > "$phio_home/phio_deploy_ed25519.pub"
+          chmod 644 "$phio_home/phio_deploy_ed25519.pub"
 
       - name: Deploy with phio
         env:

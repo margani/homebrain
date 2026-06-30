@@ -1,12 +1,13 @@
 import {
-	countReviewInboxNotes,
+	getCachedInboxCount,
 	listActiveThingSummaries,
 	listDashboardBuyList,
 	listDashboardDueRoutines,
 	listDashboardRecentNotes,
 	listRecentlyLinkedMemoryEvents,
 	listTodayPromptAnswers,
-	localDateKey
+	localDateKey,
+	seedInboxCountCache
 } from '$lib/pocketbase/data';
 import { loadUserAndPb } from '$lib/pocketbase/load';
 
@@ -23,7 +24,7 @@ export async function load() {
 		buyList,
 		reflectionAnswers
 	] = await Promise.all([
-		countReviewInboxNotes(pb, user.id),
+		getCachedInboxCount(pb, user.id),
 		listDashboardRecentNotes(pb, user.id),
 		listRecentlyLinkedMemoryEvents(pb, user.id),
 		listActiveThingSummaries(pb, user.id),
@@ -33,6 +34,7 @@ export async function load() {
 	]);
 
 	const answeredPromptCount = reflectionAnswers.filter((answer) => answer.answer?.trim()).length;
+	seedInboxCountCache(user.id, inboxCount);
 
 	return {
 		inboxCount,

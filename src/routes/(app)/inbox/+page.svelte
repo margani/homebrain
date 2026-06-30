@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Activity, Archive, Boxes, Check, Repeat, ShoppingBasket, X } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
+	import { parseActivityDurationMinutes } from '$lib/pocketbase/activity';
 	import {
 		getBrowserPb,
 		refreshInboxCount,
@@ -176,17 +177,16 @@
 			throw new Error('Choose a valid activity type.');
 		}
 
-		const durationValue = String(formData.get('duration_minutes') ?? '').trim();
-		const durationMinutes = Number(durationValue);
-		if (!durationValue || !Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-			throw new Error('Duration minutes must be a positive whole number.');
+		const parsedDuration = parseActivityDurationMinutes(formData.get('duration_minutes'));
+		if (parsedDuration.error) {
+			throw new Error(parsedDuration.error);
 		}
 
 		const notes = String(formData.get('notes') ?? '').trim();
 		const user = await requireUser();
 		await logNoteEventAsActivity(getBrowserPb(), user.id, eventId, {
 			activity_type: activityTypeValue as ActivityType,
-			duration_minutes: durationMinutes,
+			duration_minutes: parsedDuration.minutes!,
 			...(notes ? { notes } : {})
 		});
 	}

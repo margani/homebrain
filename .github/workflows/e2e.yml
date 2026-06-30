@@ -1,0 +1,48 @@
+name: Playwright E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.ts'
+      - 'svelte.config.js'
+      - 'vite.config.ts'
+
+jobs:
+  e2e:
+    name: Browser smoke tests
+    runs-on: ubuntu-latest
+
+    env:
+      PUBLIC_POCKETBASE_URL: 'http://127.0.0.1:8090'
+      PUBLIC_REPOSITORY_URL: 'https://github.com/${{ github.repository }}'
+      PUBLIC_GIT_COMMIT: '${{ github.sha }}'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: E2E tests
+        run: npm run test:e2e

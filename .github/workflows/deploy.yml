@@ -12,11 +12,11 @@ concurrency:
 
 jobs:
   deploy:
-    name: Build and upload static app
+    name: Build and deploy static app
     runs-on: ubuntu-latest
 
     env:
-      PUBLIC_POCKETBASE_URL: 'https://db.home.whosane.dev'
+      PUBLIC_POCKETBASE_URL: ''
       PUBLIC_REPOSITORY_URL: 'https://github.com/${{ github.repository }}'
       PUBLIC_GIT_COMMIT: '${{ github.sha }}'
 
@@ -27,7 +27,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -36,53 +36,58 @@ jobs:
       - name: Check
         run: npm run check
 
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Build
         run: |
           rm -rf build
           npm run build
           test -f build/index.html
 
-      - name: Install SFTP client
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lftp
+      - name: Stage static build for PocketHost
+        run: |
+          deploy_dir="$RUNNER_TEMP/homebrain-deploy"
+          rm -rf "$deploy_dir"
+          mkdir -p "$deploy_dir/pb_public"
+          cp -a build/. "$deploy_dir/pb_public/"
+          test -f "$deploy_dir/pb_public/index.html"
+          echo "DEPLOY_DIR=$deploy_dir" >> "$GITHUB_ENV"
 
-      - name: Configure SSH key
+      - name: Install phio CLI
+        run: |
+          npm install -g tsx phio
+          phio --help
+
+      - name: Configure phio deploy key
         env:
-          POCKETHOST_SFTP_HOST: ${{ secrets.POCKETHOST_SFTP_HOST }}
-          POCKETHOST_SFTP_PORT: ${{ secrets.POCKETHOST_SFTP_PORT }}
-          POCKETHOST_SSH_PRIVATE_KEY: ${{ secrets.POCKETHOST_SSH_PRIVATE_KEY }}
+          PHIO_DEPLOY_PRIVATE_KEY: ${{ secrets.PHIO_DEPLOY_PRIVATE_KEY }}
         run: |
           set -euo pipefail
 
-          : "${POCKETHOST_SFTP_HOST:?Missing POCKETHOST_SFTP_HOST secret}"
-          : "${POCKETHOST_SFTP_PORT:?Missing POCKETHOST_SFTP_PORT secret}"
-          : "${POCKETHOST_SSH_PRIVATE_KEY:?Missing POCKETHOST_SSH_PRIVATE_KEY secret}"
+          : "${PHIO_DEPLOY_PRIVATE_KEY:?Missing PHIO_DEPLOY_PRIVATE_KEY secret}"
 
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$POCKETHOST_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$POCKETHOST_SFTP_PORT" "$POCKETHOST_SFTP_HOST" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
+          phio_home="$RUNNER_TEMP/phio-home"
+          echo "PHIO_HOME=$phio_home" >> "$GITHUB_ENV"
+          install -m 700 -d "$phio_home"
+          printf '%s\n' "$PHIO_DEPLOY_PRIVATE_KEY" | tr -d '\r' > "$phio_home/phio_deploy_ed25519"
+          chmod 600 "$phio_home/phio_deploy_ed25519"
+          ssh-keygen -y -f "$phio_home/phio_deploy_ed25519" > "$phio_home/phio_deploy_ed25519.pub"
+          chmod 644 "$phio_home/phio_deploy_ed25519.pub"
 
-      - name: Upload build contents to PocketHost pb_public
+      - name: Deploy with phio
         env:
-          POCKETHOST_SFTP_HOST: ${{ secrets.POCKETHOST_SFTP_HOST }}
-          POCKETHOST_SFTP_USERNAME: ${{ secrets.POCKETHOST_SFTP_USERNAME }}
-          POCKETHOST_SFTP_PORT: ${{ secrets.POCKETHOST_SFTP_PORT }}
+          PHIO_USERNAME: ${{ secrets.PHIO_USERNAME }}
+          PHIO_PASSWORD: ${{ secrets.PHIO_PASSWORD }}
+          PHIO_INSTANCE: ${{ secrets.PHIO_INSTANCE }}
+          PHIO_INSTANCE_NAME: ${{ secrets.PHIO_INSTANCE }}
         run: |
           set -euo pipefail
 
-          : "${POCKETHOST_SFTP_HOST:?Missing POCKETHOST_SFTP_HOST secret}"
-          : "${POCKETHOST_SFTP_USERNAME:?Missing POCKETHOST_SFTP_USERNAME secret}"
-          : "${POCKETHOST_SFTP_PORT:?Missing POCKETHOST_SFTP_PORT secret}"
-          test -d build
+          : "${PHIO_USERNAME:?Missing PHIO_USERNAME secret}"
+          : "${PHIO_PASSWORD:?Missing PHIO_PASSWORD secret}"
+          : "${PHIO_INSTANCE:?Missing PHIO_INSTANCE secret}"
+          : "${DEPLOY_DIR:?Missing DEPLOY_DIR}"
 
-          lftp <<LFTP
-          set cmd:fail-exit yes
-          set net:max-retries 2
-          set net:timeout 20
-          set sftp:connect-program "ssh -a -x -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
-          open -u "$POCKETHOST_SFTP_USERNAME","" -p "$POCKETHOST_SFTP_PORT" "sftp://$POCKETHOST_SFTP_HOST"
-          mkdir -p pb_public
-          mirror --reverse --delete --verbose --parallel=2 build/ pb_public/
-          bye
-          LFTP
+          cd "$DEPLOY_DIR"
+          phio deploy "$PHIO_INSTANCE"

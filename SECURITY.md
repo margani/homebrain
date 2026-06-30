@@ -41,8 +41,9 @@ Local development origin:
 http://localhost:5173
 ```
 
-PocketBase OAuth redirect URI:
+OAuth redirect URIs for the SPA redirect sign-in flow:
 
 ```text
-https://db.home.whosane.dev/api/oauth2-redirect
+https://home.whosane.dev/oauth2-redirect
+http://localhost:5173/oauth2-redirect
 ```

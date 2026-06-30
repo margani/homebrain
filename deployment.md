@@ -10,7 +10,9 @@ HomeBrain deploys as a static frontend to PocketHost/PocketBase `pb_public`. The
 
 ## Why phio
 
-Use `phio` instead of raw SFTP because it is the PocketHost-oriented deployment CLI. It avoids managing SSH keys, host keys, SFTP ports, and manual remote paths in GitHub Actions. The workflow authenticates with PocketHost account credentials, selects the target instance, and runs a PocketHost deployment command.
+Use `phio` instead of raw SFTP because it is the PocketHost-oriented deployment CLI. It avoids managing SFTP ports and manual remote paths in GitHub Actions. The workflow authenticates with PocketHost account credentials, selects the target instance, and runs a PocketHost deployment command.
+
+The current phio CLI still uses an Ed25519 deploy key internally for its SFTP sync. In CI, provide a stable phio deploy key so a fresh GitHub runner does not generate a different key on every deploy.
 
 ## Automated GitHub Deployment
 
@@ -25,7 +27,8 @@ The workflow:
 5. Runs `npm run build`.
 6. Copies the contents of `build/` into a temporary deploy directory containing only `pb_public/`.
 7. Installs the `phio` CLI and the `tsx` runner required by the current phio package.
-8. Runs `phio deploy` against the PocketHost instance from `PHIO_INSTANCE`.
+8. Writes the stable phio deploy key from `PHIO_DEPLOY_PRIVATE_KEY` into `PHIO_HOME`.
+9. Runs `phio deploy` against the PocketHost instance from `PHIO_INSTANCE`.
 
 The workflow stages `build/*` contents into `pb_public/`, then runs `phio deploy` from that temporary deploy directory. The deployed PocketHost folder contains the app files directly rather than a nested `build` directory.
 
@@ -37,11 +40,48 @@ Add these repository secrets in GitHub under Settings -> Secrets and variables -
 PHIO_USERNAME
 PHIO_PASSWORD
 PHIO_INSTANCE
+PHIO_DEPLOY_PRIVATE_KEY
 ```
 
 `PHIO_INSTANCE` should be the PocketHost instance name accepted by `phio link <instance>` and `phio deploy <instance>`.
 
-Do not commit PocketHost credentials. Do not put them in `.env`.
+`PHIO_DEPLOY_PRIVATE_KEY` should be an OpenSSH Ed25519 private key. The workflow derives the matching public key with `ssh-keygen -y` and writes it to phio's expected `phio_deploy_ed25519.pub` path.
+
+Do not commit PocketHost credentials or private keys. Do not put them in `.env`.
+
+## phio Deploy Key Setup
+
+Generate an Ed25519 key for GitHub Actions:
+
+```sh
+ssh-keygen -t ed25519 -C "github-actions-homebrain-phio" -f ~/.ssh/homebrain_phio_deploy_ed25519
+```
+
+Add the private key contents to the GitHub repository secret:
+
+```text
+PHIO_DEPLOY_PRIVATE_KEY
+```
+
+Install the public key in PocketHost:
+
+1. Open `https://pockethost.io/account/keys`.
+2. Add or update the key labeled `Phio`.
+3. Paste the contents of:
+
+   ```text
+   ~/.ssh/homebrain_phio_deploy_ed25519.pub
+   ```
+
+The key label must be `Phio`, because phio looks for that exact account key label during deploy.
+
+If GitHub Actions reports:
+
+```text
+Account key "Phio" does not match the local key
+```
+
+replace the existing PocketHost Account -> Keys entry labeled `Phio` with the public key that matches `PHIO_DEPLOY_PRIVATE_KEY`, or delete the old `Phio` key and add the matching public key again.
 
 ## Local phio Workflow
 
@@ -78,7 +118,7 @@ GitHub Actions uses PocketHost credentials from secrets and runs:
 phio deploy "$PHIO_INSTANCE"
 ```
 
-The workflow also sets `PHIO_INSTANCE_NAME` from the same secret for phio's CI environment support.
+The workflow also sets `PHIO_INSTANCE_NAME` from the same secret for phio's CI environment support and sets `PHIO_HOME` to a temporary directory populated from `PHIO_DEPLOY_PRIVATE_KEY`.
 
 ## PocketBase CORS
 

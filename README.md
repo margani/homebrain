@@ -18,11 +18,13 @@ Create an environment file:
 cp .env.example .env
 ```
 
-Set your PocketBase URL:
+Set your PocketBase URL for local Vite development:
 
 ```sh
 PUBLIC_POCKETBASE_URL=https://your-pocketbase.example.com
 ```
+
+When the built app is served by PocketBase from `pb_public`, `PUBLIC_POCKETBASE_URL` can be blank. The browser will use the current origin.
 
 PocketBase should have Google OAuth and email/password auth enabled on the `users` collection. The app expects these collections from `pb_schema.json`:
 

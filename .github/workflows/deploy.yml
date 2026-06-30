@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PUBLIC_POCKETBASE_URL: 'https://home.whosane.dev'
+      PUBLIC_POCKETBASE_URL: ''
       PUBLIC_REPOSITORY_URL: 'https://github.com/${{ github.repository }}'
       PUBLIC_GIT_COMMIT: '${{ github.sha }}'
 

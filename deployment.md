@@ -5,8 +5,8 @@ HomeBrain deploys as a static frontend to PocketHost/PocketBase `pb_public`. The
 ## Production Domains
 
 - Frontend: `https://home.whosane.dev`
-- PocketBase backend: `https://home.whosane.dev`
-- Public environment variable: `PUBLIC_POCKETBASE_URL=https://home.whosane.dev`
+- PocketBase backend: same origin as the loaded app
+- Public environment variable for PocketHost deploys: `PUBLIC_POCKETBASE_URL=` blank
 
 ## Why phio
 
@@ -31,6 +31,8 @@ The workflow:
 9. Runs `phio deploy` against the PocketHost instance from `PHIO_INSTANCE`.
 
 The workflow stages `build/*` contents into `pb_public/`, then runs `phio deploy` from that temporary deploy directory. The deployed PocketHost folder contains the app files directly rather than a nested `build` directory.
+
+Because PocketBase serves the SPA from `pb_public`, the browser should call PocketBase on the current origin. The workflow leaves `PUBLIC_POCKETBASE_URL` blank so the app falls back to `window.location.origin` at runtime.
 
 ## Required GitHub Secrets
 
@@ -122,7 +124,7 @@ The workflow also sets `PHIO_INSTANCE_NAME` from the same secret for phio's CI e
 
 ## PocketBase CORS
 
-Configure the PocketBase backend at `https://home.whosane.dev`.
+Configure the PocketBase backend at the same origin that serves the app.
 
 Allowed origins:
 
@@ -154,7 +156,7 @@ Authorized redirect URI:
 https://home.whosane.dev/api/oauth2-redirect
 ```
 
-The OAuth redirect URI points to PocketBase, not the static frontend.
+The OAuth redirect URI points to PocketBase on the same origin that serves the static frontend.
 
 ## Smoke Test
 

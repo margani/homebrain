@@ -36,6 +36,9 @@ jobs:
       - name: Check
         run: npm run check
 
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Build
         run: |
           rm -rf build

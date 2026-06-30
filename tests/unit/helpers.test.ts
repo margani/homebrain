@@ -1,0 +1,101 @@
+import { describe, expect, it } from 'vitest';
+import { parseActivityDurationMinutes, formatActivityDuration } from '../../src/lib/pocketbase/activity';
+import {
+	activityMetadataFor,
+	isActivityNoteArchiveEvent,
+	isDismissedNoteArchiveEvent,
+	isLinkedNoteArchiveEvent,
+	isNewNoteArchiveEvent,
+	isReviewedNoteArchiveEvent,
+	localDateKey
+} from '../../src/lib/pocketbase/data';
+import { editorText, firstNonEmptyLine, formatDateTime, labelFromValue } from '../../src/lib/pocketbase/format';
+import { filterAndSortThings, thingLocationSummary, thingQuantitySummary } from '../../src/lib/pocketbase/things';
+import { fixtureEvents, fixtureThings } from '../fixtures/homebrain';
+
+describe('date and formatting helpers', () => {
+	it('creates local date keys', () => {
+		expect(localDateKey(new Date(2026, 5, 30, 9, 15))).toBe('2026-06-30');
+	});
+
+	it('formats empty and rich text safely', () => {
+		expect(formatDateTime('')).toBe('No date');
+		expect(labelFromValue('personal_care')).toBe('Personal Care');
+		expect(editorText('<p>Hello&nbsp;&amp;&nbsp;home</p>')).toBe('Hello & home');
+		expect(firstNonEmptyLine('\nFirst\nSecond')).toBe('First');
+	});
+});
+
+describe('activity helpers', () => {
+	it('parses and formats valid activity duration', () => {
+		expect(parseActivityDurationMinutes('30')).toEqual({ minutes: 30 });
+		expect(formatActivityDuration(30)).toBe('30 min');
+	});
+
+	it('rejects invalid activity duration', () => {
+		expect(parseActivityDurationMinutes('0').error).toContain('positive whole number');
+		expect(parseActivityDurationMinutes('2.5').error).toContain('positive whole number');
+		expect(formatActivityDuration(undefined)).toBe('');
+	});
+});
+
+describe('note metadata helpers', () => {
+	it('detects review states', () => {
+		expect(isNewNoteArchiveEvent(fixtureEvents[0])).toBe(true);
+		expect(isReviewedNoteArchiveEvent(fixtureEvents[1])).toBe(true);
+		expect(isDismissedNoteArchiveEvent(fixtureEvents[2])).toBe(true);
+		expect(isLinkedNoteArchiveEvent(fixtureEvents[3])).toBe(true);
+		expect(isActivityNoteArchiveEvent(fixtureEvents[4])).toBe(true);
+	});
+
+	it('extracts activity metadata', () => {
+		expect(activityMetadataFor(fixtureEvents[4])).toEqual({
+			activity_type: 'walking',
+			duration_minutes: 30
+		});
+	});
+});
+
+describe('things filtering and sorting', () => {
+	it('searches by name, notes, unit, and location', () => {
+		expect(filterAndSortThings(fixtureThings, { search: 'coffee' }).map((thing) => thing.id)).toEqual([
+			'thing_inventory'
+		]);
+		expect(filterAndSortThings(fixtureThings, { search: 'bag' }).map((thing) => thing.id)).toEqual([
+			'thing_inventory'
+		]);
+		expect(filterAndSortThings(fixtureThings, { search: 'kitchen' }).map((thing) => thing.id)).toEqual([
+			'thing_inventory'
+		]);
+		expect(filterAndSortThings(fixtureThings, { search: 'herbs' }).map((thing) => thing.id)).toEqual([
+			'thing_routine'
+		]);
+	});
+
+	it('filters by type, status, and location', () => {
+		expect(filterAndSortThings(fixtureThings, { type: 'routine' }).map((thing) => thing.id)).toEqual([
+			'thing_routine'
+		]);
+		expect(filterAndSortThings(fixtureThings, { status: 'low' }).map((thing) => thing.id)).toEqual([
+			'thing_inventory'
+		]);
+		expect(filterAndSortThings(fixtureThings, { location: 'none' }).map((thing) => thing.id)).toEqual([
+			'thing_routine'
+		]);
+	});
+
+	it('sorts by updated, name, type, and status', () => {
+		expect(filterAndSortThings(fixtureThings, { sort: 'updated' })[0].id).toBe('thing_inventory');
+		expect(filterAndSortThings(fixtureThings, { sort: 'name' }).map((thing) => thing.name)).toEqual([
+			'Coffee beans',
+			'Water plants'
+		]);
+		expect(filterAndSortThings(fixtureThings, { sort: 'type' })[0].type).toBe('inventory');
+		expect(filterAndSortThings(fixtureThings, { sort: 'status' })[0].status).toBe('due');
+	});
+
+	it('summarizes quantity and location', () => {
+		expect(thingQuantitySummary(fixtureThings[0])).toBe('one bag');
+		expect(thingLocationSummary(fixtureThings[0])).toBe('Kitchen');
+	});
+});

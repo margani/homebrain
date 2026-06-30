@@ -3,13 +3,19 @@
 	import { onMount } from 'svelte';
 	import { Boxes, ChevronRight, LayoutGrid, List, Search, X } from 'lucide-svelte';
 	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
+	import {
+		filterAndSortThings,
+		matchesThingStatusScope,
+		thingLocationSummary as locationSummary,
+		thingQuantitySummary as quantitySummary,
+		uniqueThingLocations
+	} from '$lib/pocketbase/things';
 	import { thingStatusOptions, thingTypeOptions, type ThingStatus, type ThingType } from '$lib/pocketbase/types';
 	import type { PageData } from './$types';
 
 	type ViewMode = 'list' | 'tiles';
 	type SortMode = 'updated' | 'name' | 'type' | 'status';
 	type Thing = PageData['things'][number];
-
 	let { data }: { data: PageData } = $props();
 
 	let viewMode = $state<ViewMode>('list');
@@ -33,38 +39,12 @@
 		}
 	});
 
-	function quantitySummary(thing: Thing) {
-		const quantity = [thing.quantity_number, thing.unit]
-			.filter((part) => part !== null && part !== undefined && String(part).trim() !== '')
-			.join(' ');
-
-		return thing.quantity_text || quantity;
-	}
-
-	function locationSummary(thing: Thing) {
-		return thing.expand?.location?.name || thing.expand?.location?.path || '';
-	}
-
-	function searchText(thing: Thing) {
-		return [
-			thing.name,
-			editorText(thing.notes),
-			thing.quantity_text,
-			thing.unit,
-			locationSummary(thing),
-			thing.expand?.location?.path
-		]
-			.filter(Boolean)
-			.join(' ')
-			.toLowerCase();
-	}
-
 	function typeHref(type: ThingType | 'all') {
 		return type === 'all' ? '/things' : `/things?type=${encodeURIComponent(type)}`;
 	}
 
 	function matchesStatusScope(thing: Thing) {
-		return statusFilter === 'all' ? thing.status !== 'archived' : thing.status === statusFilter;
+		return matchesThingStatusScope(thing, statusFilter);
 	}
 
 	function typeCount(type: ThingType) {
@@ -81,13 +61,7 @@
 
 	const statusScopedThings = $derived(data.things.filter((thing) => matchesStatusScope(thing)));
 	const typeChips = $derived(thingTypeOptions.filter((type) => typeCount(type) > 0));
-	const locationOptions = $derived(
-		statusScopedThings
-			.filter((thing) => thing.expand?.location)
-			.map((thing) => thing.expand!.location!)
-			.filter((location, index, locations) => locations.findIndex((item) => item.id === location.id) === index)
-			.sort((a, b) => (a.name || a.path || '').localeCompare(b.name || b.path || ''))
-	);
+	const locationOptions = $derived(uniqueThingLocations(statusScopedThings));
 	const hasUnassignedLocation = $derived(statusScopedThings.some((thing) => !thing.location));
 	const hasAnyFilters = $derived(
 		Boolean(searchTerm.trim()) ||
@@ -96,32 +70,13 @@
 			locationFilter !== 'all' ||
 			sortMode !== 'updated'
 	);
-	const filteredThings = $derived(
-		(() => {
-			const query = searchTerm.trim().toLowerCase();
-			const matches = data.things.filter((thing) => {
-				if (data.selectedType !== 'all' && thing.type !== data.selectedType) return false;
-				if (!matchesStatusScope(thing)) return false;
-				if (locationFilter === 'none' && thing.location) return false;
-				if (locationFilter !== 'all' && locationFilter !== 'none' && thing.location !== locationFilter) return false;
-				if (query && !searchText(thing).includes(query)) return false;
-
-				return true;
-			});
-
-			return [...matches].sort((a, b) => {
-				if (sortMode === 'name') return a.name.localeCompare(b.name);
-				if (sortMode === 'type') {
-					return `${a.type} ${a.name}`.localeCompare(`${b.type} ${b.name}`);
-				}
-				if (sortMode === 'status') {
-					return `${a.status ?? ''} ${a.name}`.localeCompare(`${b.status ?? ''} ${b.name}`);
-				}
-
-				return new Date(b.updated).getTime() - new Date(a.updated).getTime();
-			});
-		})()
-	);
+	const filteredThings = $derived(filterAndSortThings(data.things, {
+		search: searchTerm,
+		type: data.selectedType,
+		status: statusFilter,
+		location: locationFilter,
+		sort: sortMode
+	}));
 </script>
 
 <svelte:head>

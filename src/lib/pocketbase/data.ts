@@ -129,7 +129,7 @@ export function localDateKey(date = new Date()) {
 	return `${year}-${month}-${day}`;
 }
 
-function recordMetadata(record: { metadata?: JsonValue }) {
+export function recordMetadata(record: { metadata?: JsonValue }) {
 	if (record.metadata && !Array.isArray(record.metadata) && typeof record.metadata === 'object') {
 		return record.metadata;
 	}
@@ -186,27 +186,37 @@ function isNoteArchiveEvent(event: EventRecord) {
 	return event.event_type === 'note' || event.event_type === 'activity';
 }
 
-function isNewNoteArchiveEvent(event: EventRecord) {
+export function isNewNoteArchiveEvent(event: EventRecord) {
 	const metadata = recordMetadata(event);
 	return metadata.reviewed !== true && metadata.processed !== true && metadata.dismissed !== true;
 }
 
-function isReviewedNoteArchiveEvent(event: EventRecord) {
+export function isReviewedNoteArchiveEvent(event: EventRecord) {
 	const metadata = recordMetadata(event);
 	return (metadata.reviewed === true || metadata.processed === true) && metadata.dismissed !== true;
 }
 
-function isDismissedNoteArchiveEvent(event: EventRecord) {
+export function isDismissedNoteArchiveEvent(event: EventRecord) {
 	return recordMetadata(event).dismissed === true;
 }
 
-function isLinkedNoteArchiveEvent(event: EventRecord) {
+export function isLinkedNoteArchiveEvent(event: EventRecord) {
 	return Boolean(event.thing);
 }
 
-function isActivityNoteArchiveEvent(event: EventRecord) {
+export function isActivityNoteArchiveEvent(event: EventRecord) {
 	const metadata = recordMetadata(event);
 	return event.event_type === 'activity' || typeof metadata.activity_type === 'string';
+}
+
+export function activityMetadataFor(event: EventRecord) {
+	const metadata = recordMetadata(event);
+
+	return {
+		activity_type: typeof metadata.activity_type === 'string' ? metadata.activity_type : '',
+		duration_minutes:
+			typeof metadata.duration_minutes === 'number' ? metadata.duration_minutes : undefined
+	};
 }
 
 function matchesNoteArchiveFilter(event: EventRecord, filter: NoteArchiveFilter) {

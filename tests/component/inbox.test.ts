@@ -38,37 +38,60 @@ function renderInbox() {
 }
 
 describe('Inbox card', () => {
-	it('initially shows only the action chooser', () => {
+	it('initially shows only the note and Review button', () => {
 		renderInbox();
 
-		expect(screen.getByText('What is this?')).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /log activity/i })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /add to buy list/i })).toBeInTheDocument();
-		expect(screen.queryByLabelText(/duration minutes/i)).not.toBeInTheDocument();
+		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^review$/i })).toBeInTheDocument();
+		expect(screen.queryByText('What is this?')).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /something i did/i })).not.toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: /^cancel$/i })).not.toBeInTheDocument();
 	});
 
-	it('choosing Activity shows only the activity form', async () => {
+	it('Review opens the meaning-first chooser', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /log activity/i }));
+		await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+		const dialog = screen.getByRole('dialog', { name: /buy coffee/i });
+		expect(within(dialog).getByText('What is this?')).toBeInTheDocument();
+		expect(within(dialog).getByRole('button', { name: /something i did/i })).toBeInTheDocument();
+		expect(within(dialog).getByRole('button', { name: /something i need/i })).toBeInTheDocument();
+		expect(within(dialog).getByRole('button', { name: /something worth remembering/i })).toBeInTheDocument();
+		expect(within(dialog).getByRole('button', { name: /something recurring/i })).toBeInTheDocument();
+		expect(within(dialog).getByRole('button', { name: /nothing important/i })).toBeInTheDocument();
+	});
+
+	it('choosing Something I did shows only the activity form', async () => {
+		const user = userEvent.setup();
+		renderInbox();
+
+		await user.click(screen.getByRole('button', { name: /^review$/i }));
+		await user.click(screen.getByRole('button', { name: /something i did/i }));
 
 		expect(screen.getByLabelText(/activity type/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/duration minutes/i)).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^log activity$/i })).toBeInTheDocument();
+		expect(screen.getByLabelText(/^duration$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/link to topic optional/i)).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^save activity$/i })).toBeInTheDocument();
 		expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
 		expect(screen.queryByLabelText(/routine name/i)).not.toBeInTheDocument();
 	});
 
-	it('Cancel returns to the action chooser', async () => {
+	it('Back returns to the meaning chooser and Cancel closes review', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /log activity/i }));
+		await user.click(screen.getByRole('button', { name: /^review$/i }));
+		await user.click(screen.getByRole('button', { name: /something i did/i }));
+		await user.click(screen.getByRole('button', { name: /^back$/i }));
+
+		expect(screen.getByRole('button', { name: /something i need/i })).toBeInTheDocument();
+		expect(screen.queryByLabelText(/^duration$/i)).not.toBeInTheDocument();
+
 		await user.click(screen.getByRole('button', { name: /^cancel$/i }));
 
-		expect(screen.getByRole('button', { name: /add to buy list/i })).toBeInTheDocument();
-		expect(screen.queryByLabelText(/duration minutes/i)).not.toBeInTheDocument();
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^review$/i })).toBeInTheDocument();
 	});
 });

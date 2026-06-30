@@ -29,9 +29,10 @@ test.describe('authenticated app smoke tests', () => {
 	test('inbox note can be logged as activity and activities page shows it', async ({ page }) => {
 		await page.goto('/inbox');
 
-		await page.getByRole('button', { name: /log activity/i }).click();
-		await page.getByLabel(/duration minutes/i).fill('15');
-		await page.getByRole('button', { name: /^log activity$/i }).click();
+		await page.getByRole('button', { name: /^review$/i }).click();
+		await page.getByRole('button', { name: /something i did/i }).click();
+		await page.getByRole('spinbutton', { name: 'Duration' }).fill('15');
+		await page.getByRole('button', { name: /^save activity$/i }).click();
 		await expect(page.getByText('Inbox is clear')).toBeVisible();
 
 		await page.goto('/activities');

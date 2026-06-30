@@ -19,7 +19,7 @@
 	import { beginPendingWork } from '$lib/ui/pending';
 	import type { PageData } from './$types';
 
-	type InboxAction = 'activity' | 'shopping' | 'thing' | 'routine';
+	type InboxAction = 'activity' | 'shopping' | 'memory' | 'routine';
 	let { data }: { data: PageData } = $props();
 
 	let removedInboxItemIds = $state<string[]>([]);
@@ -36,30 +36,34 @@
 	const inboxItems = $derived(
 		data.inboxItems.filter((item) => !removedInboxItemIds.includes(item.id))
 	);
+	const activeItem = $derived(inboxItems.find((item) => item.id === activeItemId) ?? null);
 
 	function titleFor(event: PageData['inboxItems'][number]) {
 		return event.title || firstNonEmptyLine(editorText(event.notes)) || 'Untitled capture';
 	}
 
-	function openAction(itemId: string, action: InboxAction) {
+	function openReview(itemId: string) {
 		if (pendingItemId) return;
 		activeItemId = itemId;
-		activeAction = action;
+		activeAction = null;
 		thingSearch = '';
 	}
 
-	function cancelAction() {
+	function closeReview() {
 		activeItemId = null;
 		activeAction = null;
 		thingSearch = '';
 	}
 
-	function isActionOpen(itemId: string, action: InboxAction) {
-		return activeItemId === itemId && activeAction === action;
+	function chooseMeaning(action: InboxAction) {
+		if (pendingItemId) return;
+		activeAction = action;
+		thingSearch = '';
 	}
 
-	function chooserDisabled(itemId: string) {
-		return Boolean(pendingItemId) || (activeItemId !== null && activeItemId !== itemId);
+	function backToMeaning() {
+		activeAction = null;
+		thingSearch = '';
 	}
 
 	function filteredThings() {
@@ -114,7 +118,7 @@
 
 		try {
 			await mutation(formData, eventId);
-			cancelAction();
+			closeReview();
 			removedInboxItemIds = [...removedInboxItemIds, eventId];
 			flashSaved(eventId);
 			refreshInboxCount();
@@ -126,22 +130,25 @@
 		}
 	}
 
-	async function markReviewed(_: FormData, eventId: string) {
-		const user = await requireUser();
-		await markNoteEventReviewed(getBrowserPb(), user.id, eventId);
-	}
-
 	async function dismissNote(_: FormData, eventId: string) {
 		const user = await requireUser();
 		await markNoteEventReviewed(getBrowserPb(), user.id, eventId, { dismissed: true });
 	}
 
-	async function linkThing(formData: FormData, eventId: string) {
+	async function maybeLinkTopic(formData: FormData, eventId: string) {
 		const thingId = String(formData.get('thing_id') ?? '').trim();
-		if (!thingId) throw new Error('Choose a thing to link.');
+		if (!thingId) return false;
 
 		const user = await requireUser();
 		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, thingId);
+		return true;
+	}
+
+	async function rememberNote(formData: FormData, eventId: string) {
+		if (await maybeLinkTopic(formData, eventId)) return;
+
+		const user = await requireUser();
+		await markNoteEventReviewed(getBrowserPb(), user.id, eventId);
 	}
 
 	async function createRoutine(formData: FormData, eventId: string) {
@@ -156,7 +163,9 @@
 		}
 
 		const user = await requireUser();
-		await createRoutineFromNoteEvent(getBrowserPb(), user.id, eventId, intervalDays, routineName);
+		const result = await createRoutineFromNoteEvent(getBrowserPb(), user.id, eventId, intervalDays, routineName);
+		const topicId = String(formData.get('thing_id') ?? '').trim() || result.thing.id;
+		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, topicId);
 	}
 
 	async function addToBuyList(formData: FormData, eventId: string) {
@@ -165,10 +174,12 @@
 		if (!itemName) throw new Error('Item name is required.');
 
 		const user = await requireUser();
-		await addNoteEventToBuyList(getBrowserPb(), user.id, eventId, {
+		const thing = await addNoteEventToBuyList(getBrowserPb(), user.id, eventId, {
 			name: itemName,
 			...(quantityText ? { quantity_text: quantityText } : {})
 		});
+		const topicId = String(formData.get('thing_id') ?? '').trim() || thing.id;
+		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, topicId);
 	}
 
 	async function logActivity(formData: FormData, eventId: string) {
@@ -189,6 +200,7 @@
 			duration_minutes: parsedDuration.minutes!,
 			...(notes ? { notes } : {})
 		});
+		await maybeLinkTopic(formData, eventId);
 	}
 </script>
 
@@ -232,143 +244,10 @@
 					<p class="notice success">Saved</p>
 				{/if}
 
-				<div class="inbox-triage">
-					<p class="inbox-question">What is this?</p>
-
-					{#if isActionOpen(item.id, 'activity')}
-					<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Logging activity...', logActivity)}>
-							<input type="hidden" name="event_id" value={item.id} />
-							<div class="inbox-form-grid">
-								<label>
-									Activity type
-									<select name="activity_type">
-										{#each activityTypeOptions as type}
-											<option value={type}>{labelFromValue(type)}</option>
-										{/each}
-									</select>
-								</label>
-								<label>
-									Duration minutes
-									<input name="duration_minutes" type="number" min="1" step="1" placeholder="30" required />
-								</label>
-							</div>
-							<div class="inbox-form-actions">
-								<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-									<Activity size={16} />
-									Log activity
-								</button>
-								<button class="ghost-action" type="button" onclick={cancelAction} disabled={Boolean(pendingItemId)}>Cancel</button>
-							</div>
-						</form>
-					{:else if isActionOpen(item.id, 'shopping')}
-						<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Adding to buy list...', addToBuyList)}>
-							<input type="hidden" name="event_id" value={item.id} />
-							<div class="inbox-form-grid">
-								<label>
-									Item name
-									<input name="item_name" value={titleFor(item)} required />
-								</label>
-								<label>
-									Quantity text
-									<input name="quantity_text" placeholder="not bought yet" />
-								</label>
-							</div>
-							<div class="inbox-form-actions">
-								<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-									<ShoppingBasket size={16} />
-									Add to buy list
-								</button>
-								<button class="ghost-action" type="button" onclick={cancelAction} disabled={Boolean(pendingItemId)}>Cancel</button>
-							</div>
-						</form>
-					{:else if isActionOpen(item.id, 'thing')}
-						<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Linking to thing...', linkThing)}>
-							<input type="hidden" name="event_id" value={item.id} />
-							{#if data.things.length}
-								<div class="inbox-form-grid">
-									<label class="wide-field">
-										Search things
-										<input type="search" bind:value={thingSearch} placeholder="Type to narrow the list" autocomplete="off" />
-									</label>
-									<label class="wide-field">
-										Thing
-										<select name="thing_id" required>
-											<option value="" disabled selected>Select a thing</option>
-											{#each filteredThings() as thing}
-												<option value={thing.id}>{thingOptionLabel(thing)}</option>
-											{/each}
-										</select>
-									</label>
-								</div>
-								{#if thingSearch && filteredThings().length === 0}
-									<p class="hint">No matching things.</p>
-								{/if}
-							{:else}
-								<p class="empty-state">No things are available to link yet.</p>
-							{/if}
-							<div class="inbox-form-actions">
-								<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId) || !data.things.length}>
-									<Boxes size={16} />
-									Link
-								</button>
-								<button class="ghost-action" type="button" onclick={cancelAction} disabled={Boolean(pendingItemId)}>Cancel</button>
-							</div>
-						</form>
-					{:else if isActionOpen(item.id, 'routine')}
-						<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating routine...', createRoutine)}>
-							<input type="hidden" name="event_id" value={item.id} />
-							<div class="inbox-form-grid">
-								<label>
-									Routine name
-									<input name="routine_name" value={titleFor(item)} required />
-								</label>
-								<label>
-									Interval days
-									<input name="interval_days" type="number" min="1" step="1" placeholder="7" required />
-								</label>
-							</div>
-							<div class="inbox-form-actions">
-								<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-									<Repeat size={16} />
-									Create routine
-								</button>
-								<button class="ghost-action" type="button" onclick={cancelAction} disabled={Boolean(pendingItemId)}>Cancel</button>
-							</div>
-						</form>
-					{:else}
-						<div class="inbox-choice-grid">
-							<button class="secondary-action compact inbox-choice-button" type="button" onclick={() => openAction(item.id, 'activity')} disabled={chooserDisabled(item.id)}>
-								<Activity size={16} />
-								Log activity
-							</button>
-							<button class="secondary-action compact inbox-choice-button" type="button" onclick={() => openAction(item.id, 'shopping')} disabled={chooserDisabled(item.id)}>
-								<ShoppingBasket size={16} />
-								Add to buy list
-							</button>
-							<button class="secondary-action compact inbox-choice-button" type="button" onclick={() => openAction(item.id, 'thing')} disabled={chooserDisabled(item.id)}>
-								<Boxes size={16} />
-								Link to thing
-							</button>
-							<button class="secondary-action compact inbox-choice-button" type="button" onclick={() => openAction(item.id, 'routine')} disabled={chooserDisabled(item.id)}>
-								<Repeat size={16} />
-								Create routine
-							</button>
-							<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Marking reviewed...', markReviewed)}>
-								<input type="hidden" name="event_id" value={item.id} />
-								<button class="secondary-action compact inbox-choice-button" type="submit" disabled={chooserDisabled(item.id)}>
-									<Check size={16} />
-									Just reviewed
-								</button>
-							</form>
-							<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Dismissing...', dismissNote)}>
-								<input type="hidden" name="event_id" value={item.id} />
-								<button class="secondary-action compact inbox-choice-button" type="submit" disabled={chooserDisabled(item.id)}>
-									<X size={16} />
-									Dismiss
-								</button>
-							</form>
-						</div>
-					{/if}
+				<div class="inbox-card-actions">
+					<button class="primary-action compact" type="button" onclick={() => openReview(item.id)} disabled={Boolean(pendingItemId)}>
+						Review
+					</button>
 				</div>
 			</article>
 		{/each}
@@ -381,4 +260,190 @@
 			<p class="empty-state">Unreviewed Quick Capture notes will appear here.</p>
 		</div>
 	</section>
+{/if}
+
+{#if activeItem}
+	<div class="review-modal-backdrop" role="presentation">
+		<div class="review-modal pending-region" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+			<PendingOverlay active={pendingItemId === activeItem.id} message={pendingMessage} />
+			<div class="review-modal-header">
+				<div>
+					<p class="eyebrow">Review quick note</p>
+					<h2 id="review-modal-title">{titleFor(activeItem)}</h2>
+				</div>
+				<button class="icon-button" type="button" onclick={closeReview} aria-label="Cancel review" disabled={Boolean(pendingItemId)}>
+					<X size={18} />
+				</button>
+			</div>
+
+			<div class="review-note-preview">
+				<time datetime={activeItem.happened_at || activeItem.created}>{formatDateTime(activeItem.happened_at || activeItem.created)}</time>
+				{#if editorText(activeItem.notes)}
+					<p>{editorText(activeItem.notes)}</p>
+				{/if}
+			</div>
+
+			{#if activeAction === null}
+				<div class="inbox-triage">
+					<p class="inbox-question">What is this?</p>
+					<div class="inbox-choice-grid meaning-choice-grid">
+						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('activity')} disabled={Boolean(pendingItemId)}>
+							<Activity size={16} />
+							Something I did
+						</button>
+						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('shopping')} disabled={Boolean(pendingItemId)}>
+							<ShoppingBasket size={16} />
+							Something I need
+						</button>
+						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('memory')} disabled={Boolean(pendingItemId)}>
+							<Boxes size={16} />
+							Something worth remembering
+						</button>
+						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('routine')} disabled={Boolean(pendingItemId)}>
+							<Repeat size={16} />
+							Something recurring
+						</button>
+						<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Dismissing...', dismissNote)}>
+							<input type="hidden" name="event_id" value={activeItem.id} />
+							<button class="secondary-action inbox-choice-button" type="submit" disabled={Boolean(pendingItemId)}>
+								<X size={16} />
+								Nothing important
+							</button>
+						</form>
+					</div>
+					<div class="inbox-form-actions">
+						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
+					</div>
+				</div>
+			{:else if activeAction === 'activity'}
+				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving activity...', logActivity)}>
+					<input type="hidden" name="event_id" value={activeItem.id} />
+					<div class="inbox-form-grid">
+						<label>
+							Activity type
+							<select name="activity_type">
+								{#each activityTypeOptions as type}
+									<option value={type}>{labelFromValue(type)}</option>
+								{/each}
+							</select>
+						</label>
+						<label>
+							Duration
+							<input name="duration_minutes" type="number" min="1" step="1" placeholder="30" required />
+						</label>
+						<label class="wide-field">
+							Link to topic optional
+							<select name="thing_id">
+								<option value="">No topic link</option>
+								{#each filteredThings() as thing}
+									<option value={thing.id}>{thingOptionLabel(thing)}</option>
+								{/each}
+							</select>
+						</label>
+					</div>
+					<div class="inbox-form-actions">
+						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+							<Activity size={16} />
+							Save activity
+						</button>
+						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
+						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
+					</div>
+				</form>
+			{:else if activeAction === 'shopping'}
+				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Adding to buy list...', addToBuyList)}>
+					<input type="hidden" name="event_id" value={activeItem.id} />
+					<div class="inbox-form-grid">
+						<label>
+							Item name
+							<input name="item_name" value={titleFor(activeItem)} required />
+						</label>
+						<label>
+							Quantity optional
+							<input name="quantity_text" placeholder="not bought yet" />
+						</label>
+						<label class="wide-field">
+							Link to topic optional
+							<select name="thing_id">
+								<option value="">Use the buy-list item as topic</option>
+								{#each filteredThings() as thing}
+									<option value={thing.id}>{thingOptionLabel(thing)}</option>
+								{/each}
+							</select>
+						</label>
+					</div>
+					<div class="inbox-form-actions">
+						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+							<ShoppingBasket size={16} />
+							Save need
+						</button>
+						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
+						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
+					</div>
+				</form>
+			{:else if activeAction === 'memory'}
+				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving memory...', rememberNote)}>
+					<input type="hidden" name="event_id" value={activeItem.id} />
+					<div class="inbox-form-grid">
+						{#if data.things.length}
+							<label class="wide-field">
+								Search topics
+								<input type="search" bind:value={thingSearch} placeholder="Type to narrow topics" autocomplete="off" />
+							</label>
+							<label class="wide-field">
+								Link to existing topic optional
+								<select name="thing_id">
+									<option value="">Just mark as reviewed</option>
+									{#each filteredThings() as thing}
+										<option value={thing.id}>{thingOptionLabel(thing)}</option>
+									{/each}
+								</select>
+							</label>
+						{:else}
+							<p class="empty-state wide-field">No topics are available yet. You can still mark this note as reviewed.</p>
+						{/if}
+					</div>
+					<div class="inbox-form-actions">
+						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+							<Check size={16} />
+							Save memory
+						</button>
+						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
+						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
+					</div>
+				</form>
+			{:else if activeAction === 'routine'}
+				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating routine...', createRoutine)}>
+					<input type="hidden" name="event_id" value={activeItem.id} />
+					<div class="inbox-form-grid">
+						<label>
+							Routine name
+							<input name="routine_name" value={titleFor(activeItem)} required />
+						</label>
+						<label>
+							Repeat every N days
+							<input name="interval_days" type="number" min="1" step="1" placeholder="7" required />
+						</label>
+						<label class="wide-field">
+							Link to topic optional
+							<select name="thing_id">
+								<option value="">Use the recurring topic</option>
+								{#each filteredThings() as thing}
+									<option value={thing.id}>{thingOptionLabel(thing)}</option>
+								{/each}
+							</select>
+						</label>
+					</div>
+					<div class="inbox-form-actions">
+						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+							<Repeat size={16} />
+							Create routine
+						</button>
+						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
+						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
+					</div>
+				</form>
+			{/if}
+		</div>
+	</div>
 {/if}

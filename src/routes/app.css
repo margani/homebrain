@@ -1289,6 +1289,11 @@ label > select:focus,
 	font-weight: 720;
 }
 
+.inbox-card-actions {
+	display: flex;
+	justify-content: flex-end;
+}
+
 .inbox-triage {
 	display: grid;
 	gap: 12px;
@@ -1314,6 +1319,8 @@ label > select:focus,
 .inbox-choice-button {
 	width: 100%;
 	min-width: 0;
+	justify-content: flex-start;
+	text-align: left;
 }
 
 .inbox-action-panel {
@@ -1335,6 +1342,61 @@ label > select:focus,
 	display: flex;
 	flex-wrap: wrap;
 	gap: 10px;
+}
+
+.review-modal-backdrop {
+	position: fixed;
+	z-index: 80;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 20px;
+	background: rgb(35 49 46 / 34%);
+}
+
+.review-modal {
+	position: relative;
+	display: grid;
+	width: min(100%, 660px);
+	max-height: min(760px, calc(100vh - 40px));
+	gap: 16px;
+	overflow: auto;
+	padding: 20px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface);
+	box-shadow: var(--shadow);
+}
+
+.review-modal-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 14px;
+}
+
+.review-note-preview {
+	display: grid;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid #e8e3d9;
+	border-radius: 8px;
+	background: #fbfaf5;
+}
+
+.review-note-preview time {
+	color: var(--muted);
+	font-size: 0.82rem;
+	font-weight: 720;
+}
+
+.review-note-preview p {
+	color: var(--ink);
+	line-height: 1.55;
+}
+
+.meaning-choice-grid {
+	grid-template-columns: 1fr;
 }
 
 .empty-inbox {
@@ -1598,6 +1660,29 @@ label > select:focus,
 	.primary-action.compact,
 	.inbox-form-actions .ghost-action {
 		width: 100%;
+	}
+
+	.inbox-card-header,
+	.review-modal-header {
+		flex-direction: column;
+	}
+
+	.inbox-card-actions {
+		justify-content: stretch;
+	}
+
+	.inbox-card-actions .primary-action {
+		width: 100%;
+	}
+
+	.review-modal-backdrop {
+		align-items: end;
+		padding: 12px;
+	}
+
+	.review-modal {
+		width: 100%;
+		max-height: calc(100vh - 24px);
 	}
 
 	.detail-list div {

@@ -465,7 +465,6 @@
           "found",
           "moved",
           "observed",
-          "stock_update",
           "reminder",
           "other"
         ]
@@ -514,19 +513,6 @@
           "mixed",
           "unknown"
         ]
-      },
-      {
-        "help": "",
-        "hidden": false,
-        "id": "number1307554610",
-        "max": null,
-        "min": null,
-        "name": "quantity_change",
-        "onlyInt": false,
-        "presentable": false,
-        "required": false,
-        "system": false,
-        "type": "number"
       },
       {
         "help": "",
@@ -1156,10 +1142,10 @@
         "system": false,
         "type": "select",
         "values": [
-          "ok",
+          "have",
           "low",
           "empty",
-          "missing",
+          "needed",
           "due",
           "paused",
           "unknown",
@@ -1179,49 +1165,6 @@
         "required": false,
         "system": false,
         "type": "relation"
-      },
-      {
-        "autogeneratePattern": "",
-        "help": "",
-        "hidden": false,
-        "id": "text2095499749",
-        "max": 0,
-        "min": 0,
-        "name": "quantity_text",
-        "pattern": "",
-        "presentable": false,
-        "primaryKey": false,
-        "required": false,
-        "system": false,
-        "type": "text"
-      },
-      {
-        "help": "",
-        "hidden": false,
-        "id": "number2603110982",
-        "max": null,
-        "min": null,
-        "name": "quantity_number",
-        "onlyInt": false,
-        "presentable": false,
-        "required": false,
-        "system": false,
-        "type": "number"
-      },
-      {
-        "autogeneratePattern": "",
-        "help": "",
-        "hidden": false,
-        "id": "text3703245907",
-        "max": 0,
-        "min": 0,
-        "name": "unit",
-        "pattern": "",
-        "presentable": false,
-        "primaryKey": false,
-        "required": false,
-        "system": false,
-        "type": "text"
       },
       {
         "help": "",

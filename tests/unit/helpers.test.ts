@@ -10,7 +10,7 @@ import {
 	localDateKey
 } from '../../src/lib/pocketbase/data';
 import { editorText, firstNonEmptyLine, formatDateTime, labelFromValue } from '../../src/lib/pocketbase/format';
-import { filterAndSortThings, thingLocationSummary, thingQuantitySummary } from '../../src/lib/pocketbase/things';
+import { filterAndSortThings, isNeedsStatus, thingLocationSummary } from '../../src/lib/pocketbase/things';
 import { fixtureEvents, fixtureThings } from '../fixtures/homebrain';
 
 describe('date and formatting helpers', () => {
@@ -57,15 +57,13 @@ describe('note metadata helpers', () => {
 });
 
 describe('things filtering and sorting', () => {
-	it('searches by name, notes, unit, and location', () => {
+	it('searches by name, notes, and location', () => {
 		expect(filterAndSortThings(fixtureThings, { search: 'coffee' }).map((thing) => thing.id)).toEqual([
 			'thing_inventory'
 		]);
-		expect(filterAndSortThings(fixtureThings, { search: 'bag' }).map((thing) => thing.id)).toEqual([
-			'thing_inventory'
-		]);
 		expect(filterAndSortThings(fixtureThings, { search: 'kitchen' }).map((thing) => thing.id)).toEqual([
-			'thing_inventory'
+			'thing_inventory',
+			'thing_empty'
 		]);
 		expect(filterAndSortThings(fixtureThings, { search: 'herbs' }).map((thing) => thing.id)).toEqual([
 			'thing_routine'
@@ -88,14 +86,19 @@ describe('things filtering and sorting', () => {
 		expect(filterAndSortThings(fixtureThings, { sort: 'updated' })[0].id).toBe('thing_inventory');
 		expect(filterAndSortThings(fixtureThings, { sort: 'name' }).map((thing) => thing.name)).toEqual([
 			'Coffee beans',
+			'Dish soap',
+			'Rice',
 			'Water plants'
 		]);
 		expect(filterAndSortThings(fixtureThings, { sort: 'type' })[0].type).toBe('inventory');
 		expect(filterAndSortThings(fixtureThings, { sort: 'status' })[0].status).toBe('due');
 	});
 
-	it('summarizes quantity and location', () => {
-		expect(thingQuantitySummary(fixtureThings[0])).toBe('one bag');
+	it('summarizes location and need states', () => {
 		expect(thingLocationSummary(fixtureThings[0])).toBe('Kitchen');
+		expect(isNeedsStatus('needed')).toBe(true);
+		expect(isNeedsStatus('low')).toBe(true);
+		expect(isNeedsStatus('empty')).toBe(true);
+		expect(isNeedsStatus('have')).toBe(false);
 	});
 });

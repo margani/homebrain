@@ -8,7 +8,7 @@
 		requireUser
 	} from '$lib/pocketbase/client';
 	import {
-		addNoteEventToBuyList,
+		addNoteEventToNeed,
 		createRoutineFromNoteEvent,
 		linkMemoryEventToThing,
 		logNoteEventAsActivity,
@@ -20,6 +20,7 @@
 	import type { PageData } from './$types';
 
 	type InboxAction = 'activity' | 'shopping' | 'memory' | 'routine';
+	type NeedStatus = 'needed' | 'low' | 'empty';
 	let { data }: { data: PageData } = $props();
 
 	let removedInboxItemIds = $state<string[]>([]);
@@ -32,6 +33,7 @@
 	let hideServerSaved = $state(false);
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
 	let thingSearch = $state('');
+	let needStatus = $state<NeedStatus>('needed');
 
 	const inboxItems = $derived(
 		data.inboxItems.filter((item) => !removedInboxItemIds.includes(item.id))
@@ -47,23 +49,33 @@
 		activeItemId = itemId;
 		activeAction = null;
 		thingSearch = '';
+		needStatus = 'needed';
 	}
 
 	function closeReview() {
 		activeItemId = null;
 		activeAction = null;
 		thingSearch = '';
+		needStatus = 'needed';
 	}
 
 	function chooseMeaning(action: InboxAction) {
 		if (pendingItemId) return;
 		activeAction = action;
 		thingSearch = '';
+		needStatus = 'needed';
 	}
 
 	function backToMeaning() {
 		activeAction = null;
 		thingSearch = '';
+		needStatus = 'needed';
+	}
+
+	function needChoiceLabel(status: NeedStatus) {
+		if (status === 'low') return 'Running low';
+		if (status === 'empty') return 'Out of stock';
+		return 'Need to buy';
 	}
 
 	function filteredThings() {
@@ -168,17 +180,22 @@
 		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, topicId);
 	}
 
-	async function addToBuyList(formData: FormData, eventId: string) {
+	async function saveNeed(formData: FormData, eventId: string) {
 		const itemName = String(formData.get('item_name') ?? '').trim();
-		const quantityText = String(formData.get('quantity_text') ?? '').trim();
+		const notes = String(formData.get('notes') ?? '').trim();
+		const statusValue = String(formData.get('need_status') ?? 'needed') as NeedStatus;
 		if (!itemName) throw new Error('Item name is required.');
+		if (!['needed', 'low', 'empty'].includes(statusValue)) throw new Error('Choose a need state.');
 
 		const user = await requireUser();
-		const thing = await addNoteEventToBuyList(getBrowserPb(), user.id, eventId, {
+		const selectedTopicId = String(formData.get('thing_id') ?? '').trim();
+		const thing = await addNoteEventToNeed(getBrowserPb(), user.id, eventId, {
 			name: itemName,
-			...(quantityText ? { quantity_text: quantityText } : {})
+			status: statusValue,
+			...(notes ? { notes } : {}),
+			...(selectedTopicId ? { topicId: selectedTopicId } : {})
 		});
-		const topicId = String(formData.get('thing_id') ?? '').trim() || thing.id;
+		const topicId = selectedTopicId || thing.id;
 		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, topicId);
 	}
 
@@ -351,21 +368,36 @@
 					</div>
 				</form>
 			{:else if activeAction === 'shopping'}
-				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Adding to buy list...', addToBuyList)}>
+				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving need...', saveNeed)}>
 					<input type="hidden" name="event_id" value={activeItem.id} />
+					<input type="hidden" name="need_status" value={needStatus} />
 					<div class="inbox-form-grid">
+						<div class="wide-field inbox-choice-grid need-choice-grid" aria-label="Need state">
+							{#each ['needed', 'low', 'empty'] as status}
+								<button
+									class:active={needStatus === status}
+									class="secondary-action inbox-choice-button"
+									type="button"
+									aria-pressed={needStatus === status}
+									onclick={() => (needStatus = status as NeedStatus)}
+									disabled={Boolean(pendingItemId)}
+								>
+									{needChoiceLabel(status as NeedStatus)}
+								</button>
+							{/each}
+						</div>
 						<label>
-							Item name
+							Name
 							<input name="item_name" value={titleFor(activeItem)} required />
 						</label>
 						<label>
-							Quantity optional
-							<input name="quantity_text" placeholder="not bought yet" />
+							Optional note
+							<input name="notes" value={editorText(activeItem.notes)} autocomplete="off" />
 						</label>
 						<label class="wide-field">
 							Link to topic optional
 							<select name="thing_id">
-								<option value="">Use the buy-list item as topic</option>
+								<option value="">Use this need as topic</option>
 								{#each filteredThings() as thing}
 									<option value={thing.id}>{thingOptionLabel(thing)}</option>
 								{/each}

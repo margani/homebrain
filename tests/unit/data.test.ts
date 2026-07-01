@@ -2,7 +2,7 @@ import type PocketBase from 'pocketbase';
 import { get } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-	addNoteEventToBuyList,
+	addNoteEventToNeed,
 	completeRoutine,
 	createQuickCaptureNote,
 	getCachedInboxCount,
@@ -10,12 +10,14 @@ import {
 	invalidateNoteArchiveCache,
 	invalidateThingsCache,
 	linkMemoryEventToThing,
+	listNeeds,
 	listActivityEvents,
 	listNoteArchiveEvents,
 	listUserThings,
 	logNoteEventAsActivity,
 	seedInboxCountCache,
-	sharedInboxCount
+	sharedInboxCount,
+	updateThingStatus
 } from '../../src/lib/pocketbase/data';
 import { fixtureEvents, fixtureRoutines, fixtureThings, fixtureUser } from '../fixtures/homebrain';
 import { createMockPocketBase } from '../utils/mockPocketBase';
@@ -80,22 +82,40 @@ describe('PocketBase mutations', () => {
 		});
 	});
 
-	it('adds a note to the buy list by creating or updating an inventory thing', async () => {
+	it('adds a note as a needed inventory thing without quantity tracking', async () => {
 		const createPb = pocketBase({ events: fixtureEvents, things: [] });
-		await addNoteEventToBuyList(createPb, fixtureUser.id, 'event_new_note', { name: 'Tea' });
-		expect(createPb.calls.find((call) => call.collection === 'things' && call.method === 'create')?.args[0]).toMatchObject({
+		await addNoteEventToNeed(createPb, fixtureUser.id, 'event_new_note', { name: 'Tea' });
+		const payload = createPb.calls.find((call) => call.collection === 'things' && call.method === 'create')?.args[0];
+		expect(payload).toMatchObject({
 			name: 'Tea',
 			type: 'inventory',
-			status: 'low',
-			quantity_number: 0,
-			quantity_text: 'not bought yet'
+			status: 'needed'
 		});
+		expect(Object.keys(payload as Record<string, unknown>).some((key) => key.includes('quantity'))).toBe(false);
 
 		const updatePb = pocketBase({ events: fixtureEvents, things: fixtureThings });
-		await addNoteEventToBuyList(updatePb, fixtureUser.id, 'event_new_note', { name: 'Coffee beans' });
+		await addNoteEventToNeed(updatePb, fixtureUser.id, 'event_new_note', {
+			name: 'Coffee beans',
+			status: 'low'
+		});
 		expect(updatePb.calls.find((call) => call.collection === 'things' && call.method === 'update')?.args[0]).toBe(
 			'thing_inventory'
 		);
+	});
+
+	it('lists open needs and can mark one as have', async () => {
+		const pb = pocketBase({ things: fixtureThings });
+
+		expect((await listNeeds(pb, fixtureUser.id)).map((thing) => thing.id)).toEqual([
+			'thing_empty',
+			'thing_inventory'
+		]);
+
+		await updateThingStatus(pb, fixtureUser.id, 'thing_inventory', 'have');
+		const update = [...pb.calls].reverse().find((call) => call.collection === 'things' && call.method === 'update');
+		expect(update?.args[1]).toMatchObject({
+			status: 'have'
+		});
 	});
 
 	it('routine done updates routine dates and creates a done event', async () => {

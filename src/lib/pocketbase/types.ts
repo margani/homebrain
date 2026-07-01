@@ -18,10 +18,10 @@ export type ThingType =
 	| 'other';
 
 export type ThingStatus =
-	| 'ok'
+	| 'have'
 	| 'low'
 	| 'empty'
-	| 'missing'
+	| 'needed'
 	| 'due'
 	| 'paused'
 	| 'unknown'
@@ -38,10 +38,10 @@ export const thingTypeOptions: ThingType[] = [
 ];
 
 export const thingStatusOptions: ThingStatus[] = [
-	'ok',
+	'have',
 	'low',
 	'empty',
-	'missing',
+	'needed',
 	'due',
 	'paused',
 	'unknown',
@@ -76,7 +76,6 @@ export type EventType =
 	| 'found'
 	| 'moved'
 	| 'observed'
-	| 'stock_update'
 	| 'reminder'
 	| 'other';
 
@@ -118,9 +117,6 @@ export interface ThingRecord extends RecordModel {
 	type: ThingType;
 	status?: ThingStatus;
 	location?: string;
-	quantity_text?: string;
-	quantity_number?: number;
-	unit?: string;
 	metadata?: JsonValue;
 	notes?: string;
 	created: string;
@@ -137,7 +133,6 @@ export interface EventRecord extends RecordModel {
 	title?: string;
 	notes?: string;
 	mood?: Mood;
-	quantity_change?: number;
 	metadata?: JsonValue;
 	happened_at?: string;
 	created: string;

@@ -13,15 +13,13 @@ import type {
 	ThingStatus,
 	ThingType
 } from './types';
+import { isNeedsStatus } from './things';
 
 export interface ThingInput {
 	name: string;
 	type: ThingType;
 	status?: ThingStatus | '';
 	location?: string;
-	quantity_text?: string;
-	quantity_number?: number;
-	unit?: string;
 	notes?: string;
 	metadata?: JsonValue;
 }
@@ -47,9 +45,11 @@ export interface ActivityLogInput {
 	notes?: string;
 }
 
-export interface ShoppingConversionInput {
+export interface NeedConversionInput {
 	name?: string;
-	quantity_text?: string;
+	status?: 'needed' | 'low' | 'empty';
+	notes?: string;
+	topicId?: string;
 }
 
 export const noteArchiveFilters = [
@@ -258,12 +258,35 @@ export async function listDueSoonRoutines(pb: PocketBase, userId: string, limit 
 
 export async function listLowStockThings(pb: PocketBase, userId: string, limit = 6) {
 	const result = await pb.collection('things').getList<ThingRecord>(1, limit, {
-		filter: pb.filter('user = {:userId} && (status = "low" || status = "empty")', { userId }),
+		filter: pb.filter('user = {:userId} && type = "inventory" && (status = "needed" || status = "low" || status = "empty" || status = "missing")', { userId }),
 		sort: 'status,name',
 		expand: 'location'
 	});
 
 	return result.items;
+}
+
+export async function listNeeds(pb: PocketBase, userId: string, limit = 200) {
+	try {
+		const result = await pb.collection('things').getList<ThingRecord>(1, limit, {
+			filter: pb.filter(
+				'user = {:userId} && type = "inventory" && (status = "needed" || status = "low" || status = "empty" || status = "missing")',
+				{ userId }
+			),
+			sort: 'status,name',
+			expand: 'location'
+		});
+
+		return result.items;
+	} catch {
+		const result = await pb.collection('things').getList<ThingRecord>(1, Math.max(limit, 200), {
+			filter: pb.filter('user = {:userId} && type = "inventory"', { userId }),
+			sort: 'status,name',
+			expand: 'location'
+		});
+
+		return result.items.filter((thing) => isNeedsStatus(thing.status)).slice(0, limit);
+	}
 }
 
 export async function listRecentNoteEvents(pb: PocketBase, userId: string, limit = 6) {
@@ -483,11 +506,11 @@ export async function listDashboardDueRoutines(pb: PocketBase, userId: string) {
 	}
 }
 
-export async function listDashboardBuyList(pb: PocketBase, userId: string) {
+export async function listDashboardNeeds(pb: PocketBase, userId: string) {
 	try {
 		return await pb.collection('things').getFullList<ThingRecord>({
 			filter: pb.filter(
-				'user = {:userId} && type = "inventory" && (status = "low" || status = "empty")',
+				'user = {:userId} && type = "inventory" && (status = "needed" || status = "low" || status = "empty" || status = "missing")',
 				{ userId }
 			),
 			sort: 'status,name'
@@ -498,7 +521,7 @@ export async function listDashboardBuyList(pb: PocketBase, userId: string) {
 			sort: 'status,name'
 		});
 
-		return things.filter((thing) => thing.status === 'low' || thing.status === 'empty');
+		return things.filter((thing) => isNeedsStatus(thing.status));
 	}
 }
 
@@ -722,9 +745,6 @@ function toThingPayload(userId: string | null, input: ThingInput) {
 		type: input.type,
 		status: input.status || '',
 		location: input.location || '',
-		quantity_text: input.quantity_text || '',
-		quantity_number: input.quantity_number ?? null,
-		unit: input.unit || '',
 		notes: input.notes || '',
 		metadata: input.metadata ?? null
 	};
@@ -742,6 +762,24 @@ export async function updateThing(pb: PocketBase, id: string, input: ThingInput)
 	});
 	invalidateThingsCache();
 	return thing;
+}
+
+export async function updateThingStatus(
+	pb: PocketBase,
+	userId: string,
+	id: string,
+	status: ThingStatus
+) {
+	const thing = await pb.collection('things').getOne<ThingRecord>(id);
+	if (thing.user !== userId) throw new Error('Thing does not belong to the current user.');
+
+	const updated = await pb.collection('things').update<ThingRecord>(
+		id,
+		{ status },
+		{ expand: 'location' }
+	);
+	invalidateThingsCache();
+	return updated;
 }
 
 export async function createRoutine(pb: PocketBase, userId: string, input: RoutineInput) {
@@ -844,41 +882,48 @@ export async function createRoutineFromNoteEvent(
 	return { thing, routine };
 }
 
-export async function addNoteEventToBuyList(
+export async function addNoteEventToNeed(
 	pb: PocketBase,
 	userId: string,
 	eventId: string,
-	input: ShoppingConversionInput = {}
+	input: NeedConversionInput = {}
 ) {
 	const event = await pb.collection('events').getOne<EventRecord>(eventId);
 	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
 
 	const name = input.name?.trim() || noteEventName(event);
-	const quantityText = input.quantity_text?.trim() || 'not bought yet';
+	const status = input.status ?? 'needed';
+	const notes = input.notes?.trim() || event.notes || '';
 	const existing = await pb.collection('things').getList<ThingRecord>(1, 1, {
 		filter: pb.filter('user = {:userId} && type = "inventory" && name = {:name}', { userId, name }),
 		sort: '-updated'
 	});
+	const existingThing = existing.items[0];
+	const metadata = input.topicId
+		? {
+				...recordMetadata(existingThing ?? {}),
+				topic_id: input.topicId
+			}
+		: existingThing?.metadata;
 	const thing = existing.items[0]
-		? await updateThing(pb, existing.items[0].id, {
+		? await updateThing(pb, existingThing.id, {
 				name,
 				type: 'inventory',
-				status: 'low',
-				quantity_number: 0,
-				quantity_text: quantityText,
-				notes: event.notes || ''
+				status,
+				location: existingThing.location || '',
+				notes,
+				metadata
 			})
 		: await createThing(pb, userId, {
 				name,
 				type: 'inventory',
-				status: 'low',
-				quantity_number: 0,
-				quantity_text: quantityText,
-				notes: event.notes || ''
+				status,
+				notes,
+				metadata
 			});
 
 	await markNoteEventReviewed(pb, userId, eventId, {
-		reviewed_as: 'shopping',
+		reviewed_as: 'need',
 		thing_id: thing.id
 	});
 
@@ -998,7 +1043,7 @@ export async function searchHomeBrain(pb: PocketBase, userId: string, query: str
 	const [things, locations, events] = await Promise.all([
 		pb.collection('things').getList<ThingRecord>(1, 12, {
 			filter: pb.filter(
-				'user = {:userId} && (name ~ {:q} || notes ~ {:q} || quantity_text ~ {:q} || unit ~ {:q})',
+				'user = {:userId} && (name ~ {:q} || notes ~ {:q})',
 				{ userId, q }
 			),
 			sort: 'name',

@@ -45,10 +45,6 @@
 		type: submittedValues?.type ?? thing?.type ?? 'other',
 		status: submittedValues?.status ?? thing?.status ?? '',
 		location: submittedValues?.location ?? thing?.location ?? '',
-		quantity_text: submittedValues?.quantity_text ?? thing?.quantity_text ?? '',
-		quantity_number:
-			submittedValues?.quantity_number ?? (thing?.quantity_number == null ? '' : String(thing.quantity_number)),
-		unit: submittedValues?.unit ?? thing?.unit ?? '',
 		notes: submittedValues?.notes ?? editorText(thing?.notes) ?? '',
 		metadata: submittedValues?.metadata ?? initialMetadata,
 		new_location_name: submittedValues?.new_location_name ?? '',
@@ -172,21 +168,6 @@
 			<p class="loading-note"><span class="loading-spinner" aria-hidden="true"></span>Creating location...</p>
 		{/if}
 	</details>
-
-	<div class="form-grid">
-		<label>
-			Quantity text
-			<input name="quantity_text" value={values.quantity_text} placeholder="Half box, two spare packs..." autocomplete="off" />
-		</label>
-		<label>
-			Quantity number
-			<input name="quantity_number" value={values.quantity_number} inputmode="decimal" autocomplete="off" />
-		</label>
-		<label>
-			Unit
-			<input name="unit" value={values.unit} placeholder="rolls, kg, bottles..." autocomplete="off" />
-		</label>
-	</div>
 
 	<label>
 		Notes

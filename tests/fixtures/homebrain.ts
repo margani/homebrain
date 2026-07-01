@@ -43,9 +43,6 @@ export const fixtureThings: ThingRecord[] = [
 		type: 'inventory',
 		status: 'low',
 		location: 'loc_kitchen',
-		quantity_text: 'one bag',
-		quantity_number: 1,
-		unit: 'bag',
 		notes: 'Dark roast for morning coffee',
 		created: older,
 		updated: now,
@@ -61,6 +58,44 @@ export const fixtureThings: ThingRecord[] = [
 				updated: now
 			}
 		}
+	},
+	{
+		id: 'thing_empty',
+		collectionId: 'things',
+		collectionName: 'things',
+		user: fixtureUser.id,
+		name: 'Dish soap',
+		type: 'inventory',
+		status: 'empty',
+		location: 'loc_kitchen',
+		notes: 'Bottle under the sink is empty',
+		created: older,
+		updated: '2026-06-30T11:00:00.000Z',
+		expand: {
+			location: {
+				id: 'loc_kitchen',
+				collectionId: 'locations',
+				collectionName: 'locations',
+				user: fixtureUser.id,
+				name: 'Kitchen',
+				path: 'Home / Kitchen',
+				created: older,
+				updated: now
+			}
+		}
+	},
+	{
+		id: 'thing_have',
+		collectionId: 'things',
+		collectionName: 'things',
+		user: fixtureUser.id,
+		name: 'Rice',
+		type: 'inventory',
+		status: 'have',
+		location: 'loc_kitchen',
+		notes: 'Pantry staple',
+		created: older,
+		updated: '2026-06-29T16:00:00.000Z'
 	},
 	{
 		id: 'thing_routine',

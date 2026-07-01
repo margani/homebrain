@@ -58,8 +58,21 @@ function filterCollection(name: string, records: any[], url: URL) {
 	if (filter.includes('type = "inventory"')) {
 		items = items.filter((item) => item.type === 'inventory');
 	}
-	if (filter.includes('status = "low" || status = "empty"')) {
-		items = items.filter((item) => item.status === 'low' || item.status === 'empty');
+	const nameMatch = filter.match(/name = "([^"]+)"/);
+	if (nameMatch) {
+		items = items.filter((item) => item.name === nameMatch[1]);
+	}
+	if (
+		filter.includes('status = "needed"') ||
+		filter.includes('status = "low"') ||
+		filter.includes('status = "empty"') ||
+		filter.includes('status = "missing"')
+	) {
+		const wanted = new Set<string>();
+		for (const status of ['needed', 'low', 'empty', 'missing']) {
+			if (filter.includes(`status = "${status}"`)) wanted.add(status);
+		}
+		items = items.filter((item) => wanted.has(item.status));
 	}
 	if (filter.includes('active = true')) {
 		items = items.filter((item) => item.active);

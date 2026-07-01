@@ -82,7 +82,7 @@
 			</div>
 			<span class="soft-icon"><LayoutDashboard size={20} /></span>
 		</div>
-		<p class="panel-copy">Review recent captures, linked things, routines, and buy-list items.</p>
+			<p class="panel-copy">Review recent captures, linked things, routines, and needs.</p>
 		<a class="secondary-action compact icon-text" href="/dashboard">
 			<LayoutDashboard size={17} />
 			Review Dashboard

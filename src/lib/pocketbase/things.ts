@@ -11,12 +11,16 @@ export interface ThingFilterOptions {
 	sort?: ThingSortMode;
 }
 
-export function thingQuantitySummary(thing: ThingRecord) {
-	const quantity = [thing.quantity_number, thing.unit]
-		.filter((part) => part !== null && part !== undefined && String(part).trim() !== '')
-		.join(' ');
+export const needStatuses = ['needed', 'low', 'empty'] as const;
 
-	return thing.quantity_text || quantity;
+export function normalizeThingStatus(status?: string | null) {
+	if (status === 'ok') return 'have';
+	if (status === 'missing') return 'needed';
+	return status || '';
+}
+
+export function isNeedsStatus(status?: string | null) {
+	return needStatuses.includes(normalizeThingStatus(status) as (typeof needStatuses)[number]);
 }
 
 export function thingLocationSummary(thing: ThingRecord) {
@@ -27,8 +31,6 @@ export function thingSearchText(thing: ThingRecord) {
 	return [
 		thing.name,
 		editorText(thing.notes),
-		thing.quantity_text,
-		thing.unit,
 		thingLocationSummary(thing),
 		thing.expand?.location?.path
 	]
@@ -38,7 +40,8 @@ export function thingSearchText(thing: ThingRecord) {
 }
 
 export function matchesThingStatusScope(thing: ThingRecord, status: ThingStatus | 'all' = 'all') {
-	return status === 'all' ? thing.status !== 'archived' : thing.status === status;
+	const normalizedStatus = normalizeThingStatus(thing.status);
+	return status === 'all' ? normalizedStatus !== 'archived' : normalizedStatus === status;
 }
 
 export function filterAndSortThings(things: ThingRecord[], options: ThingFilterOptions = {}) {
@@ -62,7 +65,7 @@ export function filterAndSortThings(things: ThingRecord[], options: ThingFilterO
 		if (sort === 'name') return a.name.localeCompare(b.name);
 		if (sort === 'type') return `${a.type} ${a.name}`.localeCompare(`${b.type} ${b.name}`);
 		if (sort === 'status') {
-			return `${a.status ?? ''} ${a.name}`.localeCompare(`${b.status ?? ''} ${b.name}`);
+			return `${normalizeThingStatus(a.status)} ${a.name}`.localeCompare(`${normalizeThingStatus(b.status)} ${b.name}`);
 		}
 
 		return new Date(b.updated).getTime() - new Date(a.updated).getTime();

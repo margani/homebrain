@@ -285,8 +285,8 @@
 	<article class="panel list-panel">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Inventory</p>
-				<h2>Low stock</h2>
+				<p class="eyebrow">Needs</p>
+				<h2>Needs</h2>
 			</div>
 			<span class="soft-icon"><ShoppingBasket size={20} /></span>
 		</div>
@@ -296,16 +296,14 @@
 					<li>
 						<div>
 							<strong>{thing.name}</strong>
-							<span>
-								{thing.quantity_text || [thing.quantity_number, thing.unit].filter(Boolean).join(' ') || thing.expand?.location?.name || 'Needs attention'}
-							</span>
+							<span>{editorText(thing.notes) || thing.expand?.location?.name || 'Needs attention'}</span>
 						</div>
 						<span class="status-pill">{labelFromValue(thing.status)}</span>
 					</li>
 				{/each}
 			</ul>
 		{:else}
-			<p class="empty-state">Nothing is marked low or empty.</p>
+			<p class="empty-state">Nothing needs attention right now.</p>
 		{/if}
 	</article>
 

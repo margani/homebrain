@@ -19,9 +19,6 @@
 			.filter((location, index, items) => items.findIndex((item) => item.id === location.id) === index)
 			.sort((a, b) => (a.path || a.name || '').localeCompare(b.path || b.name || ''))
 	);
-	const quantity = $derived(
-		thing.quantity_text || [thing.quantity_number, thing.unit].filter(Boolean).join(' ')
-	);
 	const metadata = $derived(thing.metadata ? JSON.stringify(thing.metadata, null, 2) : '');
 
 	function eventTitle(event: PageData['relatedEvents'][number]) {
@@ -98,10 +95,6 @@
 			<div>
 				<dt>Location</dt>
 				<dd>{thing.expand?.location?.name ?? 'Not set'}</dd>
-			</div>
-			<div>
-				<dt>Quantity</dt>
-				<dd>{quantity || 'Not set'}</dd>
 			</div>
 			<div>
 				<dt>Created</dt>

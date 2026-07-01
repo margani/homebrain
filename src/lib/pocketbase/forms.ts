@@ -12,9 +12,6 @@ export interface ThingFormValues {
 	type: string;
 	status: string;
 	location: string;
-	quantity_text: string;
-	quantity_number: string;
-	unit: string;
 	notes: string;
 	metadata: string;
 	new_location_name: string;
@@ -57,9 +54,6 @@ export function parseThingFormData(formData: FormData): ParsedThingForm {
 		type: value(formData, 'type'),
 		status: value(formData, 'status'),
 		location: value(formData, 'location'),
-		quantity_text: value(formData, 'quantity_text'),
-		quantity_number: value(formData, 'quantity_number'),
-		unit: value(formData, 'unit'),
 		notes: value(formData, 'notes'),
 		metadata: value(formData, 'metadata'),
 		new_location_name: value(formData, 'new_location_name'),
@@ -83,19 +77,6 @@ export function parseThingFormData(formData: FormData): ParsedThingForm {
 		};
 	}
 
-	let quantityNumber: number | undefined;
-	if (values.quantity_number) {
-		quantityNumber = Number(values.quantity_number);
-		if (!Number.isFinite(quantityNumber)) {
-			return {
-				values,
-				thing: { name: values.name, type },
-				newLocation: null,
-				error: 'Quantity number must be a valid number.'
-			};
-		}
-	}
-
 	const metadata = parseMetadata(values.metadata);
 	if (metadata.error) {
 		return {
@@ -113,9 +94,6 @@ export function parseThingFormData(formData: FormData): ParsedThingForm {
 			type,
 			status,
 			location: values.location,
-			quantity_text: values.quantity_text,
-			quantity_number: quantityNumber,
-			unit: values.unit,
 			notes: values.notes,
 			metadata: metadata.value
 		},

@@ -14,7 +14,7 @@ vi.mock('$lib/pocketbase/data', async () => {
 	const actual = await vi.importActual<typeof import('../../src/lib/pocketbase/data')>('../../src/lib/pocketbase/data');
 	return {
 		...actual,
-		addNoteEventToBuyList: vi.fn(),
+		addNoteEventToNeed: vi.fn(),
 		createRoutineFromNoteEvent: vi.fn(),
 		linkMemoryEventToThing: vi.fn(),
 		logNoteEventAsActivity: vi.fn(),
@@ -93,5 +93,22 @@ describe('Inbox card', () => {
 
 		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /^review$/i })).toBeInTheDocument();
+	});
+
+	it('choosing Something I need shows state choices and no quantity fields', async () => {
+		const user = userEvent.setup();
+		renderInbox();
+
+		await user.click(screen.getByRole('button', { name: /^review$/i }));
+		await user.click(screen.getByRole('button', { name: /something i need/i }));
+
+		expect(screen.getByRole('button', { name: /need to buy/i })).toHaveAttribute('aria-pressed', 'true');
+		expect(screen.getByRole('button', { name: /running low/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /out of stock/i })).toBeInTheDocument();
+		expect(screen.getByLabelText(/^name$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/optional note/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/link to topic optional/i)).toBeInTheDocument();
+		expect(screen.queryByLabelText(/quantity/i)).not.toBeInTheDocument();
+		expect(screen.queryByPlaceholderText(/not bought yet/i)).not.toBeInTheDocument();
 	});
 });

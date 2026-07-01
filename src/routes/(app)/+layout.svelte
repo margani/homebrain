@@ -13,6 +13,7 @@
 		NotebookText,
 		Search,
 		Settings,
+		ShoppingBasket,
 		Boxes
 	} from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
@@ -34,6 +35,7 @@
 		{ href: '/today', label: 'Today', icon: House },
 		{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 		{ href: '/inbox', label: 'Inbox', icon: Inbox },
+		{ href: '/needs', label: 'Needs', icon: ShoppingBasket },
 		{ href: '/notes', label: 'Notes', icon: NotebookText },
 		{ href: '/activities', label: 'Activities', icon: Activity },
 		{ href: '/things', label: 'Things', icon: Boxes },
@@ -42,7 +44,11 @@
 		{ href: '/settings', label: 'Settings', icon: Settings }
 	];
 	const bottomNavItems = navItems.filter(
-		(item) => item.href !== '/dashboard' && item.href !== '/notes' && item.href !== '/activities'
+		(item) =>
+			item.href !== '/dashboard' &&
+			item.href !== '/needs' &&
+			item.href !== '/notes' &&
+			item.href !== '/activities'
 	);
 
 	let isLoggingOut = $state(false);
@@ -89,6 +95,7 @@
 	function isActive(href: string) {
 		const pathname = page.url.pathname;
 		if (href === '/things') return pathname.startsWith('/things');
+		if (href === '/needs') return pathname.startsWith('/needs');
 		if (href === '/notes') return pathname.startsWith('/notes');
 		if (href === '/activities') return pathname.startsWith('/activities');
 		return pathname === href;

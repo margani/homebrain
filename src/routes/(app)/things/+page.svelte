@@ -7,7 +7,6 @@
 		filterAndSortThings,
 		matchesThingStatusScope,
 		thingLocationSummary as locationSummary,
-		thingQuantitySummary as quantitySummary,
 		uniqueThingLocations
 	} from '$lib/pocketbase/things';
 	import { thingStatusOptions, thingTypeOptions, type ThingStatus, type ThingType } from '$lib/pocketbase/types';
@@ -99,7 +98,7 @@
 		<div class="things-toolbar">
 			<div class="input-shell things-search">
 				<Search size={18} />
-				<input bind:value={searchTerm} type="search" placeholder="Search things, notes, quantities, locations..." autocomplete="off" />
+				<input bind:value={searchTerm} type="search" placeholder="Search things, notes, locations..." autocomplete="off" />
 			</div>
 			<div class="view-toggle" aria-label="View mode">
 				<button class:active={viewMode === 'list'} type="button" onclick={() => (viewMode = 'list')} aria-pressed={viewMode === 'list'}>
@@ -170,7 +169,6 @@
 					<span>Type</span>
 					<span>Status</span>
 					<span>Location</span>
-					<span>Quantity</span>
 					<span>Updated</span>
 					<span></span>
 				</div>
@@ -197,10 +195,6 @@
 						<div class="things-list-cell">
 							<span class="things-list-label">Location</span>
 							<span>{locationSummary(thing) || 'Not set'}</span>
-						</div>
-						<div class="things-list-cell">
-							<span class="things-list-label">Quantity</span>
-							<span>{quantitySummary(thing) || 'Not set'}</span>
 						</div>
 						<div class="things-list-cell">
 							<span class="things-list-label">Updated</span>
@@ -230,9 +224,9 @@
 								<span>{labelFromValue(thing.status)}</span>
 							{/if}
 						</div>
-						{#if quantitySummary(thing) || editorText(thing.notes)}
+						{#if editorText(thing.notes)}
 							<p class="thing-summary">
-								{quantitySummary(thing) || editorText(thing.notes)}
+								{editorText(thing.notes)}
 							</p>
 						{/if}
 					</a>

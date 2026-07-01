@@ -36,8 +36,17 @@ function matchesFilter(record: RecordLike, filter = '') {
 	if (filter.includes('next_due_at != ""') && !record.next_due_at) return false;
 	if (filter.includes('metadata.reviewed != true') && getValue(record, 'metadata.reviewed') === true) return false;
 	if (filter.includes('metadata.processed != true') && getValue(record, 'metadata.processed') === true) return false;
-	if (filter.includes('status = "low" || status = "empty"')) {
-		return record.status === 'low' || record.status === 'empty';
+	if (
+		filter.includes('status = "needed"') ||
+		filter.includes('status = "low"') ||
+		filter.includes('status = "empty"') ||
+		filter.includes('status = "missing"')
+	) {
+		const wanted = new Set<string>();
+		for (const status of ['needed', 'low', 'empty', 'missing']) {
+			if (filter.includes(`status = "${status}"`)) wanted.add(status);
+		}
+		return wanted.has(String(record.status));
 	}
 
 	const nameMatch = filter.match(/name = "([^"]+)"/);

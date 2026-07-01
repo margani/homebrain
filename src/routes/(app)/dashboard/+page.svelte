@@ -45,12 +45,8 @@
 		return event.title || firstNonEmptyLine(editorText(event.notes)) || 'Untitled note';
 	}
 
-	function quantityFor(thing: PageData['buyList'][number]) {
-		const quantity = [thing.quantity_number, thing.unit]
-			.filter((part) => part !== null && part !== undefined && String(part).trim() !== '')
-			.join(' ');
-
-		return thing.quantity_text || quantity || 'Needs attention';
+	function needDetail(thing: PageData['needs'][number]) {
+		return editorText(thing.notes) || thing.expand?.location?.name || 'Needs attention';
 	}
 </script>
 
@@ -63,7 +59,7 @@
 		<p class="eyebrow">Review</p>
 		<h1>Dashboard</h1>
 	</div>
-	<p>A quiet view of captures, links, routines, and buy-list items.</p>
+	<p>A quiet view of captures, links, routines, and needs.</p>
 </section>
 
 <section class="dashboard-summary-grid" aria-label="Review summary">
@@ -91,17 +87,17 @@
 		<span>{data.dueRoutines.length === 1 ? 'routine scheduled' : 'routines scheduled'}</span>
 	</article>
 
-	<article class="panel dashboard-summary-card">
+	<a class="panel dashboard-summary-card" href="/needs">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Inventory</p>
-				<h2>Buy list</h2>
+				<p class="eyebrow">Needs</p>
+				<h2>Open</h2>
 			</div>
 			<span class="soft-icon"><ShoppingBasket size={20} /></span>
 		</div>
-		<strong>{data.buyList.length}</strong>
-		<span>{data.buyList.length === 1 ? 'item marked low' : 'items marked low'}</span>
-	</article>
+		<strong>{data.needs.length}</strong>
+		<span>{data.needs.length === 1 ? 'item needs attention' : 'items need attention'}</span>
+	</a>
 
 	<a class="panel dashboard-summary-card" href="/reflection">
 		<div class="panel-heading">
@@ -243,25 +239,25 @@
 	<article class="panel dashboard-section">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Inventory</p>
-				<h2>Buy List</h2>
+				<p class="eyebrow">Needs</p>
+				<h2>Open Needs</h2>
 			</div>
 			<span class="soft-icon"><ShoppingBasket size={20} /></span>
 		</div>
-		{#if data.buyList.length}
+		{#if data.needs.length}
 			<ul class="record-list dashboard-record-list">
-				{#each data.buyList as thing}
+				{#each data.needs as thing}
 					<li>
 						<div>
 							<a class="record-title-link" href={`/things/${thing.id}`}>{thing.name}</a>
-							<span>{quantityFor(thing)}</span>
+							<span>{needDetail(thing)}</span>
 						</div>
 						<span class="status-pill">{labelFromValue(thing.status)}</span>
 					</li>
 				{/each}
 			</ul>
 		{:else}
-			<p class="empty-state">Nothing is marked low or empty.</p>
+			<p class="empty-state">Nothing needs attention right now.</p>
 		{/if}
 	</article>
 </section>

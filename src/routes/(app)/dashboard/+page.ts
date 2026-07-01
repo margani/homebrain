@@ -1,8 +1,8 @@
 import {
 	getCachedInboxCount,
 	listActiveThingSummaries,
-	listDashboardBuyList,
 	listDashboardDueRoutines,
+	listDashboardNeeds,
 	listDashboardRecentNotes,
 	listRecentlyLinkedMemoryEvents,
 	listTodayPromptAnswers,
@@ -21,7 +21,7 @@ export async function load() {
 		recentlyLinked,
 		activeThings,
 		dueRoutines,
-		buyList,
+		needs,
 		reflectionAnswers
 	] = await Promise.all([
 		getCachedInboxCount(pb, user.id),
@@ -29,7 +29,7 @@ export async function load() {
 		listRecentlyLinkedMemoryEvents(pb, user.id),
 		listActiveThingSummaries(pb, user.id),
 		listDashboardDueRoutines(pb, user.id),
-		listDashboardBuyList(pb, user.id),
+		listDashboardNeeds(pb, user.id),
 		listTodayPromptAnswers(pb, user.id, dateKey)
 	]);
 
@@ -42,7 +42,7 @@ export async function load() {
 		recentlyLinked,
 		activeThings,
 		dueRoutines,
-		buyList,
+		needs,
 		reflection: {
 			dateKey,
 			hasAnswers: reflectionAnswers.length > 0,

@@ -15,6 +15,7 @@ vi.mock('$lib/pocketbase/data', async () => {
 	return {
 		...actual,
 		addNoteEventToNeed: vi.fn(),
+		createMetricObservationFromNoteEvent: vi.fn(),
 		createRoutineFromNoteEvent: vi.fn(),
 		linkMemoryEventToThing: vi.fn(),
 		logNoteEventAsActivity: vi.fn(),
@@ -58,6 +59,7 @@ describe('Inbox card', () => {
 		expect(within(dialog).getByText('What is this?')).toBeInTheDocument();
 		expect(within(dialog).getByRole('button', { name: /something i did/i })).toBeInTheDocument();
 		expect(within(dialog).getByRole('button', { name: /something i need/i })).toBeInTheDocument();
+		expect(within(dialog).getByRole('button', { name: /something i measured/i })).toBeInTheDocument();
 		expect(within(dialog).getByRole('button', { name: /something worth remembering/i })).toBeInTheDocument();
 		expect(within(dialog).getByRole('button', { name: /something recurring/i })).toBeInTheDocument();
 		expect(within(dialog).getByRole('button', { name: /nothing important/i })).toBeInTheDocument();
@@ -110,5 +112,21 @@ describe('Inbox card', () => {
 		expect(screen.getByLabelText(/link to topic optional/i)).toBeInTheDocument();
 		expect(screen.queryByLabelText(/quantity/i)).not.toBeInTheDocument();
 		expect(screen.queryByPlaceholderText(/not bought yet/i)).not.toBeInTheDocument();
+	});
+
+	it('choosing Something I measured shows metric fields without quantity fields', async () => {
+		const user = userEvent.setup();
+		renderInbox();
+
+		await user.click(screen.getByRole('button', { name: /^review$/i }));
+		await user.click(screen.getByRole('button', { name: /something i measured/i }));
+
+		expect(screen.getByLabelText(/link to existing topic optional/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/metric name/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^value$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^unit$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/category for new topic optional/i)).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^save measurement$/i })).toBeInTheDocument();
+		expect(screen.queryByLabelText(/quantity/i)).not.toBeInTheDocument();
 	});
 });

@@ -42,6 +42,7 @@ export const fixtureThings: ThingRecord[] = [
 		name: 'Coffee beans',
 		type: 'inventory',
 		status: 'low',
+		category: 'Groceries',
 		location: 'loc_kitchen',
 		notes: 'Dark roast for morning coffee',
 		created: older,
@@ -67,6 +68,7 @@ export const fixtureThings: ThingRecord[] = [
 		name: 'Dish soap',
 		type: 'inventory',
 		status: 'empty',
+		category: 'Home',
 		location: 'loc_kitchen',
 		notes: 'Bottle under the sink is empty',
 		created: older,
@@ -92,6 +94,7 @@ export const fixtureThings: ThingRecord[] = [
 		name: 'Rice',
 		type: 'inventory',
 		status: 'have',
+		category: 'Groceries',
 		location: 'loc_kitchen',
 		notes: 'Pantry staple',
 		created: older,
@@ -105,9 +108,23 @@ export const fixtureThings: ThingRecord[] = [
 		name: 'Water plants',
 		type: 'routine',
 		status: 'due',
+		category: 'Home',
 		notes: 'Balcony herbs',
 		created: older,
 		updated: '2026-06-28T12:00:00.000Z'
+	},
+	{
+		id: 'thing_weight',
+		collectionId: 'things',
+		collectionName: 'things',
+		user: fixtureUser.id,
+		name: 'Weight',
+		type: 'other',
+		status: 'unknown',
+		category: 'Health',
+		notes: 'Body weight measurements',
+		created: older,
+		updated: '2026-06-30T07:30:00.000Z'
 	},
 	{
 		id: 'thing_archived',
@@ -117,6 +134,7 @@ export const fixtureThings: ThingRecord[] = [
 		name: 'Old kettle',
 		type: 'inventory',
 		status: 'archived',
+		category: 'Home',
 		notes: 'Retired',
 		created: older,
 		updated: '2026-06-20T12:00:00.000Z'
@@ -192,6 +210,36 @@ export const fixtureEvents: EventRecord[] = [
 		created: now,
 		updated: now,
 		expand: { thing: fixtureThings[1] }
+	},
+	{
+		id: 'event_metric_weight',
+		collectionId: 'events',
+		collectionName: 'events',
+		user: fixtureUser.id,
+		thing: 'thing_weight',
+		event_type: 'metric',
+		title: 'Weight: 94 kg',
+		notes: 'Morning weigh-in',
+		metadata: { metric_value: 94, metric_unit: 'kg', metric_label: 'Weight' },
+		happened_at: '2026-06-30T07:30:00.000Z',
+		created: '2026-06-30T07:30:00.000Z',
+		updated: '2026-06-30T07:30:00.000Z',
+		expand: { thing: fixtureThings[4] }
+	},
+	{
+		id: 'event_metric_coffee',
+		collectionId: 'events',
+		collectionName: 'events',
+		user: fixtureUser.id,
+		thing: 'thing_inventory',
+		event_type: 'metric',
+		title: 'Coffee beans: 2 bags',
+		notes: 'Cupboard check',
+		metadata: { metric_value: 2, metric_unit: 'bags', metric_label: 'Coffee beans' },
+		happened_at: '2026-06-29T18:00:00.000Z',
+		created: '2026-06-29T18:00:00.000Z',
+		updated: '2026-06-29T18:00:00.000Z',
+		expand: { thing: fixtureThings[0] }
 	}
 ];
 

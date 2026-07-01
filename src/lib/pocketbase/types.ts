@@ -69,6 +69,7 @@ export type EventType =
 	| 'mood'
 	| 'note'
 	| 'activity'
+	| 'metric'
 	| 'created'
 	| 'done'
 	| 'bought'
@@ -116,6 +117,7 @@ export interface ThingRecord extends RecordModel {
 	name: string;
 	type: ThingType;
 	status?: ThingStatus;
+	category?: string;
 	location?: string;
 	metadata?: JsonValue;
 	notes?: string;

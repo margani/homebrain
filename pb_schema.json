@@ -458,6 +458,7 @@
           "mood",
           "note",
           "activity",
+          "metric",
           "created",
           "done",
           "bought",
@@ -1151,6 +1152,20 @@
           "unknown",
           "archived"
         ]
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text_category_homebrain",
+        "max": 0,
+        "min": 0,
+        "name": "category",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
       },
       {
         "cascadeDelete": false,

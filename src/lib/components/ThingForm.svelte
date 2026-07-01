@@ -44,6 +44,7 @@
 		name: submittedValues?.name ?? thing?.name ?? '',
 		type: submittedValues?.type ?? thing?.type ?? 'other',
 		status: submittedValues?.status ?? thing?.status ?? '',
+		category: submittedValues?.category ?? thing?.category ?? '',
 		location: submittedValues?.location ?? thing?.location ?? '',
 		notes: submittedValues?.notes ?? editorText(thing?.notes) ?? '',
 		metadata: submittedValues?.metadata ?? initialMetadata,
@@ -131,6 +132,11 @@
 					<option value={status} selected={values.status === status}>{labelFromValue(status)}</option>
 				{/each}
 			</select>
+		</label>
+
+		<label>
+			Category
+			<input name="category" value={values.category} placeholder="Health, Groceries, Home..." autocomplete="off" />
 		</label>
 
 		<label>

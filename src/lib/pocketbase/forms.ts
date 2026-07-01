@@ -11,6 +11,7 @@ export interface ThingFormValues {
 	name: string;
 	type: string;
 	status: string;
+	category: string;
 	location: string;
 	notes: string;
 	metadata: string;
@@ -53,6 +54,7 @@ export function parseThingFormData(formData: FormData): ParsedThingForm {
 		name: value(formData, 'name'),
 		type: value(formData, 'type'),
 		status: value(formData, 'status'),
+		category: value(formData, 'category'),
 		location: value(formData, 'location'),
 		notes: value(formData, 'notes'),
 		metadata: value(formData, 'metadata'),
@@ -93,6 +95,7 @@ export function parseThingFormData(formData: FormData): ParsedThingForm {
 			name: values.name,
 			type,
 			status,
+			category: values.category,
 			location: values.location,
 			notes: values.notes,
 			metadata: metadata.value

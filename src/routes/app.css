@@ -775,6 +775,36 @@ a.dashboard-summary-card:hover {
 	gap: 8px;
 }
 
+.metrics-list {
+	display: grid;
+	gap: 10px;
+}
+
+.metric-card {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 14px;
+}
+
+.metric-card p {
+	margin-top: 6px;
+	color: var(--muted);
+	font-size: 0.92rem;
+	line-height: 1.45;
+}
+
+.metric-card > strong {
+	color: var(--accent-strong);
+	font-size: 1.06rem;
+	white-space: nowrap;
+}
+
+.metric-meta-row {
+	justify-content: flex-start;
+	margin-top: 5px;
+}
+
 .dashboard-pill-row {
 	display: flex;
 	flex: 0 0 auto;
@@ -1111,7 +1141,7 @@ label > select:focus,
 	display: grid;
 	grid-template-columns:
 		minmax(180px, 1.7fr) minmax(92px, 0.7fr) minmax(92px, 0.7fr)
-		minmax(120px, 1fr) minmax(138px, 0.9fr) 42px;
+		minmax(110px, 0.9fr) minmax(120px, 1fr) minmax(138px, 0.9fr) 42px;
 	align-items: center;
 	gap: 10px;
 }

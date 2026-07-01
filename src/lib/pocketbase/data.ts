@@ -19,9 +19,20 @@ export interface ThingInput {
 	name: string;
 	type: ThingType;
 	status?: ThingStatus | '';
+	category?: string;
 	location?: string;
 	notes?: string;
 	metadata?: JsonValue;
+}
+
+export interface MetricObservationInput {
+	thingId?: string;
+	thingName?: string;
+	category?: string;
+	value: number;
+	unit: string;
+	label?: string;
+	notes?: string;
 }
 
 export interface LocationInput {
@@ -69,6 +80,7 @@ export interface ActiveThingSummary {
 	name: string;
 	type: ThingType;
 	status?: ThingStatus;
+	category?: string;
 	linkedEventCount: number;
 	latestActivity: string;
 }
@@ -157,12 +169,13 @@ function groupActiveThingEvents(events: EventRecord[]) {
 
 		if (!existing) {
 			summaries.set(thing.id, {
-				id: thing.id,
-				name: thing.name,
-				type: thing.type,
-				status: thing.status,
-				linkedEventCount: 1,
-				latestActivity
+					id: thing.id,
+					name: thing.name,
+					type: thing.type,
+					status: thing.status,
+					category: thing.category,
+					linkedEventCount: 1,
+					latestActivity
 			});
 			continue;
 		}
@@ -217,6 +230,25 @@ export function activityMetadataFor(event: EventRecord) {
 		duration_minutes:
 			typeof metadata.duration_minutes === 'number' ? metadata.duration_minutes : undefined
 	};
+}
+
+export function metricMetadataFor(event: EventRecord) {
+	const metadata = recordMetadata(event);
+	const rawValue = metadata.metric_value;
+	const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+
+	return {
+		metric_value: Number.isFinite(value) ? value : undefined,
+		metric_unit: typeof metadata.metric_unit === 'string' ? metadata.metric_unit : '',
+		metric_label: typeof metadata.metric_label === 'string' ? metadata.metric_label : ''
+	};
+}
+
+export function metricEventSummary(event: EventRecord) {
+	const metric = metricMetadataFor(event);
+	if (metric.metric_value === undefined || !metric.metric_unit) return event.title || '';
+
+	return `${metric.metric_label || event.expand?.thing?.name || 'Measurement'}: ${metric.metric_value} ${metric.metric_unit}`;
 }
 
 function matchesNoteArchiveFilter(event: EventRecord, filter: NoteArchiveFilter) {
@@ -460,6 +492,34 @@ export async function listActivityEvents(pb: PocketBase, userId: string, limit =
 	return result.items;
 }
 
+export async function listMetricEvents(pb: PocketBase, userId: string, limit = 200) {
+	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+		filter: pb.filter('user = {:userId} && event_type = "metric"', { userId }),
+		sort: '-happened_at,-created',
+		expand: 'thing'
+	});
+
+	return result.items;
+}
+
+export async function listThingMetricEvents(
+	pb: PocketBase,
+	userId: string,
+	thingId: string,
+	limit = 50
+) {
+	const result = await pb.collection('events').getList<EventRecord>(1, limit, {
+		filter: pb.filter('user = {:userId} && thing = {:thingId} && event_type = "metric"', {
+			userId,
+			thingId
+		}),
+		sort: '-happened_at,-created',
+		expand: 'thing'
+	});
+
+	return result.items;
+}
+
 export async function listActiveThingSummaries(pb: PocketBase, userId: string, days = 30) {
 	const cutoff = recentCutoffIso(days);
 
@@ -523,6 +583,10 @@ export async function listDashboardNeeds(pb: PocketBase, userId: string) {
 
 		return things.filter((thing) => isNeedsStatus(thing.status));
 	}
+}
+
+export async function listDashboardRecentMetricEvents(pb: PocketBase, userId: string, limit = 5) {
+	return await listMetricEvents(pb, userId, limit);
 }
 
 export async function createQuickCaptureNote(pb: PocketBase, userId: string, text: string) {
@@ -744,6 +808,7 @@ function toThingPayload(userId: string | null, input: ThingInput) {
 		name: input.name,
 		type: input.type,
 		status: input.status || '',
+		category: input.category || '',
 		location: input.location || '',
 		notes: input.notes || '',
 		metadata: input.metadata ?? null
@@ -780,6 +845,51 @@ export async function updateThingStatus(
 	);
 	invalidateThingsCache();
 	return updated;
+}
+
+export async function createMetricObservation(
+	pb: PocketBase,
+	userId: string,
+	input: MetricObservationInput
+) {
+	const unit = input.unit.trim();
+	const value = input.value;
+	const label = input.label?.trim() || input.thingName?.trim() || 'Measurement';
+	if (!Number.isFinite(value)) throw new Error('Metric value must be a valid number.');
+	if (!unit) throw new Error('Metric unit is required.');
+
+	let thing: ThingRecord;
+	if (input.thingId) {
+		thing = await pb.collection('things').getOne<ThingRecord>(input.thingId);
+		if (thing.user !== userId) throw new Error('Thing does not belong to the current user.');
+	} else {
+		const name = input.thingName?.trim() || label;
+		if (!name) throw new Error('Metric name is required.');
+		thing = await createThing(pb, userId, {
+			name,
+			type: 'other',
+			status: 'unknown',
+			category: input.category?.trim() || '',
+			notes: ''
+		});
+	}
+
+	const metricLabel = input.label?.trim() || thing.name;
+	const event = await pb.collection('events').create<EventRecord>({
+		user: userId,
+		thing: thing.id,
+		event_type: 'metric',
+		title: `${metricLabel}: ${value} ${unit}`,
+		notes: input.notes?.trim() || '',
+		happened_at: new Date().toISOString(),
+		metadata: {
+			metric_value: value,
+			metric_unit: unit,
+			metric_label: metricLabel
+		}
+	});
+	invalidateNoteArchiveCache();
+	return { thing, event };
 }
 
 export async function createRoutine(pb: PocketBase, userId: string, input: RoutineInput) {
@@ -882,6 +992,26 @@ export async function createRoutineFromNoteEvent(
 	return { thing, routine };
 }
 
+export async function createMetricObservationFromNoteEvent(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	input: MetricObservationInput
+) {
+	const note = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (note.user !== userId) throw new Error('Event does not belong to the current user.');
+	if (note.event_type !== 'note') throw new Error('Only note events can become measurements.');
+
+	const result = await createMetricObservation(pb, userId, input);
+	await markNoteEventReviewed(pb, userId, eventId, {
+		reviewed_as: 'metric',
+		thing_id: result.thing.id,
+		metric_event_id: result.event.id
+	});
+
+	return result;
+}
+
 export async function addNoteEventToNeed(
 	pb: PocketBase,
 	userId: string,
@@ -908,10 +1038,11 @@ export async function addNoteEventToNeed(
 	const thing = existing.items[0]
 		? await updateThing(pb, existingThing.id, {
 				name,
-				type: 'inventory',
-				status,
-				location: existingThing.location || '',
-				notes,
+					type: 'inventory',
+					status,
+					category: existingThing.category || '',
+					location: existingThing.location || '',
+					notes,
 				metadata
 			})
 		: await createThing(pb, userId, {
@@ -1043,7 +1174,7 @@ export async function searchHomeBrain(pb: PocketBase, userId: string, query: str
 	const [things, locations, events] = await Promise.all([
 		pb.collection('things').getList<ThingRecord>(1, 12, {
 			filter: pb.filter(
-				'user = {:userId} && (name ~ {:q} || notes ~ {:q})',
+				'user = {:userId} && (name ~ {:q} || category ~ {:q} || notes ~ {:q})',
 				{ userId, q }
 			),
 			sort: 'name',

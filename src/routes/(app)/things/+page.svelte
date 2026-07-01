@@ -7,6 +7,7 @@
 		filterAndSortThings,
 		matchesThingStatusScope,
 		thingLocationSummary as locationSummary,
+		uniqueThingCategories,
 		uniqueThingLocations
 	} from '$lib/pocketbase/things';
 	import { thingStatusOptions, thingTypeOptions, type ThingStatus, type ThingType } from '$lib/pocketbase/types';
@@ -21,6 +22,7 @@
 	let viewReady = $state(false);
 	let searchTerm = $state('');
 	let statusFilter = $state<ThingStatus | 'all'>('all');
+	let categoryFilter = $state('all');
 	let locationFilter = $state('all');
 	let sortMode = $state<SortMode>('updated');
 
@@ -53,6 +55,7 @@
 	function clearFilters() {
 		searchTerm = '';
 		statusFilter = 'all';
+		categoryFilter = 'all';
 		locationFilter = 'all';
 		sortMode = 'updated';
 		goto('/things', { noScroll: true, keepFocus: true });
@@ -60,12 +63,15 @@
 
 	const statusScopedThings = $derived(data.things.filter((thing) => matchesStatusScope(thing)));
 	const typeChips = $derived(thingTypeOptions.filter((type) => typeCount(type) > 0));
+	const categoryOptions = $derived(uniqueThingCategories(statusScopedThings));
+	const hasUnassignedCategory = $derived(statusScopedThings.some((thing) => !thing.category));
 	const locationOptions = $derived(uniqueThingLocations(statusScopedThings));
 	const hasUnassignedLocation = $derived(statusScopedThings.some((thing) => !thing.location));
 	const hasAnyFilters = $derived(
 		Boolean(searchTerm.trim()) ||
 			data.selectedType !== 'all' ||
 			statusFilter !== 'all' ||
+			categoryFilter !== 'all' ||
 			locationFilter !== 'all' ||
 			sortMode !== 'updated'
 	);
@@ -73,6 +79,7 @@
 		search: searchTerm,
 		type: data.selectedType,
 		status: statusFilter,
+		category: categoryFilter,
 		location: locationFilter,
 		sort: sortMode
 	}));
@@ -98,7 +105,7 @@
 		<div class="things-toolbar">
 			<div class="input-shell things-search">
 				<Search size={18} />
-				<input bind:value={searchTerm} type="search" placeholder="Search things, notes, locations..." autocomplete="off" />
+				<input bind:value={searchTerm} type="search" placeholder="Search things, categories, notes, locations..." autocomplete="off" />
 			</div>
 			<div class="view-toggle" aria-label="View mode">
 				<button class:active={viewMode === 'list'} type="button" onclick={() => (viewMode = 'list')} aria-pressed={viewMode === 'list'}>
@@ -144,6 +151,18 @@
 				</select>
 			</label>
 			<label>
+				Category
+				<select bind:value={categoryFilter}>
+					<option value="all">All categories</option>
+					{#if hasUnassignedCategory}
+						<option value="none">No category</option>
+					{/if}
+					{#each categoryOptions as category}
+						<option value={category}>{category}</option>
+					{/each}
+				</select>
+			</label>
+			<label>
 				Sort
 				<select bind:value={sortMode}>
 					<option value="updated">Recently updated</option>
@@ -168,6 +187,7 @@
 					<span>Name</span>
 					<span>Type</span>
 					<span>Status</span>
+					<span>Category</span>
 					<span>Location</span>
 					<span>Updated</span>
 					<span></span>
@@ -191,6 +211,10 @@
 							{:else}
 								<span class="muted-value">Not set</span>
 							{/if}
+						</div>
+						<div class="things-list-cell">
+							<span class="things-list-label">Category</span>
+							<span>{thing.category || 'Not set'}</span>
 						</div>
 						<div class="things-list-cell">
 							<span class="things-list-label">Location</span>
@@ -220,6 +244,9 @@
 						</div>
 						<div class="tag-row">
 							<span>{labelFromValue(thing.type)}</span>
+							{#if thing.category}
+								<span>{thing.category}</span>
+							{/if}
 							{#if thing.status}
 								<span>{labelFromValue(thing.status)}</span>
 							{/if}

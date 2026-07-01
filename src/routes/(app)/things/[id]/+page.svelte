@@ -2,7 +2,7 @@
 	import { Activity, Boxes, NotebookText } from 'lucide-svelte';
 	import ThingForm from '$lib/components/ThingForm.svelte';
 	import { getBrowserPb, requireUser } from '$lib/pocketbase/client';
-	import { createLocation, updateThing } from '$lib/pocketbase/data';
+	import { createLocation, metricMetadataFor, updateThing } from '$lib/pocketbase/data';
 	import { editorText, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
 	import type { ParsedThingForm } from '$lib/pocketbase/forms';
 	import type { JsonValue } from '$lib/pocketbase/types';
@@ -85,6 +85,9 @@
 		{#if thing.status}
 			<span>{labelFromValue(thing.status)}</span>
 		{/if}
+		{#if thing.category}
+			<span>{thing.category}</span>
+		{/if}
 	</div>
 </section>
 
@@ -92,6 +95,10 @@
 	<article class="panel">
 		<h2>Details</h2>
 		<dl class="detail-list">
+			<div>
+				<dt>Category</dt>
+				<dd>{thing.category || 'Not set'}</dd>
+			</div>
 			<div>
 				<dt>Location</dt>
 				<dd>{thing.expand?.location?.name ?? 'Not set'}</dd>
@@ -122,6 +129,35 @@
 			<pre class="metadata-block">{metadata}</pre>
 		</article>
 	{/if}
+
+	<article class="panel wide-panel">
+		<div class="panel-heading">
+			<div>
+				<p class="eyebrow">Metrics</p>
+				<h2>Measurements</h2>
+			</div>
+		</div>
+		{#if data.metricEvents.length}
+			<ul class="record-list dashboard-record-list">
+				{#each data.metricEvents as event}
+					{@const metric = metricMetadataFor(event)}
+					<li>
+						<div>
+							<strong>{metric.metric_value} {metric.metric_unit}</strong>
+							{#if editorText(event.notes)}
+								<span>{editorText(event.notes)}</span>
+							{:else}
+								<span>{metric.metric_label || thing.name}</span>
+							{/if}
+						</div>
+						<time datetime={event.happened_at || event.created}>{formatDateTime(event.happened_at || event.created)}</time>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="empty-state">Measurements will appear here when saved.</p>
+		{/if}
+	</article>
 
 	<article class="panel wide-panel">
 		<div class="panel-heading">

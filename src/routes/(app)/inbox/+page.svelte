@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Activity, Archive, Boxes, Check, Repeat, ShoppingBasket, X } from 'lucide-svelte';
+	import { Activity, Archive, Boxes, Check, Ruler, Repeat, ShoppingBasket, X } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
 	import { parseActivityDurationMinutes } from '$lib/pocketbase/activity';
 	import {
@@ -9,6 +9,7 @@
 	} from '$lib/pocketbase/client';
 	import {
 		addNoteEventToNeed,
+		createMetricObservationFromNoteEvent,
 		createRoutineFromNoteEvent,
 		linkMemoryEventToThing,
 		logNoteEventAsActivity,
@@ -19,7 +20,7 @@
 	import { beginPendingWork } from '$lib/ui/pending';
 	import type { PageData } from './$types';
 
-	type InboxAction = 'activity' | 'shopping' | 'memory' | 'routine';
+	type InboxAction = 'activity' | 'shopping' | 'metric' | 'memory' | 'routine';
 	type NeedStatus = 'needed' | 'low' | 'empty';
 	let { data }: { data: PageData } = $props();
 
@@ -82,7 +83,7 @@
 		const query = thingSearch.trim().toLowerCase();
 		const things = query
 			? data.things.filter((thing) =>
-					`${thing.name} ${thing.type} ${thing.status ?? ''}`.toLowerCase().includes(query)
+					`${thing.name} ${thing.type} ${thing.status ?? ''} ${thing.category ?? ''}`.toLowerCase().includes(query)
 				)
 			: data.things;
 
@@ -90,7 +91,12 @@
 	}
 
 	function thingOptionLabel(thing: PageData['things'][number]) {
-		return [thing.name, labelFromValue(thing.type), thing.status ? labelFromValue(thing.status) : '']
+		return [
+			thing.name,
+			thing.category,
+			labelFromValue(thing.type),
+			thing.status ? labelFromValue(thing.status) : ''
+		]
 			.filter(Boolean)
 			.join(' · ');
 	}
@@ -197,6 +203,29 @@
 		});
 		const topicId = selectedTopicId || thing.id;
 		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, topicId);
+	}
+
+	async function saveMetric(formData: FormData, eventId: string) {
+		const existingThingId = String(formData.get('thing_id') ?? '').trim();
+		const metricName = String(formData.get('metric_name') ?? '').trim();
+		const value = Number(String(formData.get('metric_value') ?? '').trim());
+		const unit = String(formData.get('metric_unit') ?? '').trim();
+		const notes = String(formData.get('notes') ?? '').trim();
+		const category = String(formData.get('category') ?? '').trim();
+
+		if (!existingThingId && !metricName) throw new Error('Metric name is required.');
+		if (!Number.isFinite(value)) throw new Error('Value must be a valid number.');
+		if (!unit) throw new Error('Unit is required.');
+
+		const user = await requireUser();
+		await createMetricObservationFromNoteEvent(getBrowserPb(), user.id, eventId, {
+			...(existingThingId ? { thingId: existingThingId } : { thingName: metricName }),
+			value,
+			unit,
+			label: metricName,
+			...(notes ? { notes } : {}),
+			...(category ? { category } : {})
+		});
 	}
 
 	async function logActivity(formData: FormData, eventId: string) {
@@ -312,6 +341,10 @@
 							<ShoppingBasket size={16} />
 							Something I need
 						</button>
+						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('metric')} disabled={Boolean(pendingItemId)}>
+							<Ruler size={16} />
+							Something I measured
+						</button>
 						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('memory')} disabled={Boolean(pendingItemId)}>
 							<Boxes size={16} />
 							Something worth remembering
@@ -408,6 +441,49 @@
 						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
 							<ShoppingBasket size={16} />
 							Save need
+						</button>
+						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
+						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
+					</div>
+				</form>
+			{:else if activeAction === 'metric'}
+				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving measurement...', saveMetric)}>
+					<input type="hidden" name="event_id" value={activeItem.id} />
+					<div class="inbox-form-grid">
+						<label class="wide-field">
+							Link to existing topic optional
+							<select name="thing_id">
+								<option value="">Create a new topic</option>
+								{#each filteredThings() as thing}
+									<option value={thing.id}>{thingOptionLabel(thing)}</option>
+								{/each}
+							</select>
+						</label>
+						<label>
+							Metric name
+							<input name="metric_name" value={titleFor(activeItem)} autocomplete="off" />
+						</label>
+						<label>
+							Value
+							<input name="metric_value" type="number" step="any" required />
+						</label>
+						<label>
+							Unit
+							<input name="metric_unit" placeholder="kg, cm, cans..." autocomplete="off" required />
+						</label>
+						<label>
+							Category for new topic optional
+							<input name="category" placeholder="Health, Groceries..." autocomplete="off" />
+						</label>
+						<label class="wide-field">
+							Optional note
+							<input name="notes" value={editorText(activeItem.notes)} autocomplete="off" />
+						</label>
+					</div>
+					<div class="inbox-form-actions">
+						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+							<Ruler size={16} />
+							Save measurement
 						</button>
 						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
 						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>

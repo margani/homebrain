@@ -35,7 +35,7 @@ function listResponse(items: unknown[], url: URL) {
 	};
 }
 
-function filterCollection(name: string, records: any[], url: URL) {
+function filterCollection(name: string, records: any[], url: URL, allThings = fixtureThings) {
 	const filter = url.searchParams.get('filter') ?? '';
 	let items = [...records];
 
@@ -45,6 +45,12 @@ function filterCollection(name: string, records: any[], url: URL) {
 		items = items.filter((item) => item.event_type === 'note');
 	} else if (filter.includes('event_type = "activity"')) {
 		items = items.filter((item) => item.event_type === 'activity');
+	} else if (filter.includes('event_type = "metric"')) {
+		items = items.filter((item) => item.event_type === 'metric');
+	}
+	const thingMatch = filter.match(/thing = "([^"]+)"/);
+	if (thingMatch) {
+		items = items.filter((item) => item.thing === thingMatch[1]);
 	}
 	if (filter.includes('metadata.reviewed != true')) {
 		items = items.filter((item) => item.metadata?.reviewed !== true);
@@ -82,9 +88,9 @@ function filterCollection(name: string, records: any[], url: URL) {
 	}
 	if (name === 'events') {
 		items = items.map((event) => ({
-			...event,
-			expand: event.thing
-				? { thing: fixtureThings.find((thing) => thing.id === event.thing) }
+				...event,
+				expand: event.thing
+				? { thing: allThings.find((thing) => thing.id === event.thing) }
 				: event.expand
 		}));
 	}
@@ -130,7 +136,7 @@ export async function mockPocketBase(page: Page) {
 		}
 
 		if (request.method() === 'GET') {
-			return json(route, listResponse(filterCollection(collection, records, url), url));
+			return json(route, listResponse(filterCollection(collection, records, url, state.things), url));
 		}
 
 		if (request.method() === 'POST') {

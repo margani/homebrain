@@ -3,6 +3,7 @@ import {
 	listActiveThingSummaries,
 	listDashboardDueRoutines,
 	listDashboardNeeds,
+	listDashboardRecentMetricEvents,
 	listDashboardRecentNotes,
 	listRecentlyLinkedMemoryEvents,
 	listTodayPromptAnswers,
@@ -22,6 +23,7 @@ export async function load() {
 		activeThings,
 		dueRoutines,
 		needs,
+		recentMetrics,
 		reflectionAnswers
 	] = await Promise.all([
 		getCachedInboxCount(pb, user.id),
@@ -30,6 +32,7 @@ export async function load() {
 		listActiveThingSummaries(pb, user.id),
 		listDashboardDueRoutines(pb, user.id),
 		listDashboardNeeds(pb, user.id),
+		listDashboardRecentMetricEvents(pb, user.id),
 		listTodayPromptAnswers(pb, user.id, dateKey)
 	]);
 
@@ -43,6 +46,7 @@ export async function load() {
 		activeThings,
 		dueRoutines,
 		needs,
+		recentMetrics,
 		reflection: {
 			dateKey,
 			hasAnswers: reflectionAnswers.length > 0,

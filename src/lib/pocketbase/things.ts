@@ -7,6 +7,7 @@ export interface ThingFilterOptions {
 	search?: string;
 	type?: ThingType | 'all';
 	status?: ThingStatus | 'all';
+	category?: string;
 	location?: string;
 	sort?: ThingSortMode;
 }
@@ -30,6 +31,7 @@ export function thingLocationSummary(thing: ThingRecord) {
 export function thingSearchText(thing: ThingRecord) {
 	return [
 		thing.name,
+		thing.category,
 		editorText(thing.notes),
 		thingLocationSummary(thing),
 		thing.expand?.location?.path
@@ -48,12 +50,15 @@ export function filterAndSortThings(things: ThingRecord[], options: ThingFilterO
 	const query = options.search?.trim().toLowerCase() ?? '';
 	const type = options.type ?? 'all';
 	const status = options.status ?? 'all';
+	const category = options.category ?? 'all';
 	const location = options.location ?? 'all';
 	const sort = options.sort ?? 'updated';
 
 	const matches = things.filter((thing) => {
 		if (type !== 'all' && thing.type !== type) return false;
 		if (!matchesThingStatusScope(thing, status)) return false;
+		if (category === 'none' && thing.category) return false;
+		if (category !== 'all' && category !== 'none' && thing.category !== category) return false;
 		if (location === 'none' && thing.location) return false;
 		if (location !== 'all' && location !== 'none' && thing.location !== location) return false;
 		if (query && !thingSearchText(thing).includes(query)) return false;
@@ -78,4 +83,10 @@ export function uniqueThingLocations(things: ThingRecord[]) {
 		.map((thing) => thing.expand!.location as LocationRecord)
 		.filter((location, index, locations) => locations.findIndex((item) => item.id === location.id) === index)
 		.sort((a, b) => (a.name || a.path || '').localeCompare(b.name || b.path || ''));
+}
+
+export function uniqueThingCategories(things: ThingRecord[]) {
+	return [...new Set(things.map((thing) => thing.category?.trim()).filter(Boolean) as string[])].sort(
+		(a, b) => a.localeCompare(b)
+	);
 }

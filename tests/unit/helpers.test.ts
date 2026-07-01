@@ -7,10 +7,12 @@ import {
 	isLinkedNoteArchiveEvent,
 	isNewNoteArchiveEvent,
 	isReviewedNoteArchiveEvent,
-	localDateKey
+	localDateKey,
+	metricEventSummary,
+	metricMetadataFor
 } from '../../src/lib/pocketbase/data';
 import { editorText, firstNonEmptyLine, formatDateTime, labelFromValue } from '../../src/lib/pocketbase/format';
-import { filterAndSortThings, isNeedsStatus, thingLocationSummary } from '../../src/lib/pocketbase/things';
+import { filterAndSortThings, isNeedsStatus, thingLocationSummary, uniqueThingCategories } from '../../src/lib/pocketbase/things';
 import { fixtureEvents, fixtureThings } from '../fixtures/homebrain';
 
 describe('date and formatting helpers', () => {
@@ -54,6 +56,15 @@ describe('note metadata helpers', () => {
 			duration_minutes: 30
 		});
 	});
+
+	it('extracts metric metadata and summaries', () => {
+		expect(metricMetadataFor(fixtureEvents[5])).toEqual({
+			metric_value: 94,
+			metric_unit: 'kg',
+			metric_label: 'Weight'
+		});
+		expect(metricEventSummary(fixtureEvents[5])).toBe('Weight: 94 kg');
+	});
 });
 
 describe('things filtering and sorting', () => {
@@ -68,9 +79,12 @@ describe('things filtering and sorting', () => {
 		expect(filterAndSortThings(fixtureThings, { search: 'herbs' }).map((thing) => thing.id)).toEqual([
 			'thing_routine'
 		]);
+		expect(filterAndSortThings(fixtureThings, { search: 'health' }).map((thing) => thing.id)).toEqual([
+			'thing_weight'
+		]);
 	});
 
-	it('filters by type, status, and location', () => {
+	it('filters by type, status, category, and location', () => {
 		expect(filterAndSortThings(fixtureThings, { type: 'routine' }).map((thing) => thing.id)).toEqual([
 			'thing_routine'
 		]);
@@ -78,7 +92,12 @@ describe('things filtering and sorting', () => {
 			'thing_inventory'
 		]);
 		expect(filterAndSortThings(fixtureThings, { location: 'none' }).map((thing) => thing.id)).toEqual([
+			'thing_weight',
 			'thing_routine'
+		]);
+		expect(filterAndSortThings(fixtureThings, { category: 'Groceries' }).map((thing) => thing.id)).toEqual([
+			'thing_inventory',
+			'thing_have'
 		]);
 	});
 
@@ -88,7 +107,8 @@ describe('things filtering and sorting', () => {
 			'Coffee beans',
 			'Dish soap',
 			'Rice',
-			'Water plants'
+			'Water plants',
+			'Weight'
 		]);
 		expect(filterAndSortThings(fixtureThings, { sort: 'type' })[0].type).toBe('inventory');
 		expect(filterAndSortThings(fixtureThings, { sort: 'status' })[0].status).toBe('due');
@@ -100,5 +120,6 @@ describe('things filtering and sorting', () => {
 		expect(isNeedsStatus('low')).toBe(true);
 		expect(isNeedsStatus('empty')).toBe(true);
 		expect(isNeedsStatus('have')).toBe(false);
+		expect(uniqueThingCategories(fixtureThings)).toEqual(['Groceries', 'Health', 'Home']);
 	});
 });

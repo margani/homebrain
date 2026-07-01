@@ -35,6 +35,8 @@ PocketBase should have Google OAuth and email/password auth enabled on the `user
 - `prompts`
 - `prompt_answers`
 
+Things may include a lightweight `category` text field. Metric-style observations are stored as `events` with `event_type = "metric"` and metric value/unit/label in event metadata.
+
 ## Development
 
 ```sh

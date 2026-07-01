@@ -5,6 +5,7 @@ import {
 	addNoteEventToNeed,
 	completeRoutine,
 	createQuickCaptureNote,
+	createMetricObservationFromNoteEvent,
 	getCachedInboxCount,
 	invalidateInboxCountCache,
 	invalidateNoteArchiveCache,
@@ -12,6 +13,7 @@ import {
 	linkMemoryEventToThing,
 	listNeeds,
 	listActivityEvents,
+	listMetricEvents,
 	listNoteArchiveEvents,
 	listUserThings,
 	logNoteEventAsActivity,
@@ -116,6 +118,49 @@ describe('PocketBase mutations', () => {
 		expect(update?.args[1]).toMatchObject({
 			status: 'have'
 		});
+	});
+
+	it('creates a metric event linked to a thing and stores value/unit in metadata', async () => {
+		const pb = pocketBase({ events: fixtureEvents, things: fixtureThings });
+
+		await createMetricObservationFromNoteEvent(pb, fixtureUser.id, 'event_new_note', {
+			thingId: 'thing_weight',
+			value: 95,
+			unit: 'kg',
+			label: 'Weight',
+			notes: 'Evening check'
+		});
+
+		const create = pb.calls.find((call) => call.collection === 'events' && call.method === 'create');
+		expect(create?.args[0]).toMatchObject({
+			thing: 'thing_weight',
+			event_type: 'metric',
+			title: 'Weight: 95 kg',
+			metadata: {
+				metric_value: 95,
+				metric_unit: 'kg',
+				metric_label: 'Weight'
+			}
+		});
+		expect(Object.keys(create?.args[0] as Record<string, unknown>).some((key) => key.includes('quantity'))).toBe(false);
+
+		const review = [...pb.calls].reverse().find((call) => call.collection === 'events' && call.method === 'update');
+		expect(review?.args[1]).toMatchObject({
+			metadata: {
+				reviewed: true,
+				reviewed_as: 'metric',
+				thing_id: 'thing_weight'
+			}
+		});
+	});
+
+	it('lists metric events newest first', async () => {
+		const pb = pocketBase({ events: fixtureEvents });
+
+		expect((await listMetricEvents(pb, fixtureUser.id)).map((event) => event.id)).toEqual([
+			'event_metric_weight',
+			'event_metric_coffee'
+		]);
 	});
 
 	it('routine done updates routine dates and creates a done event', async () => {

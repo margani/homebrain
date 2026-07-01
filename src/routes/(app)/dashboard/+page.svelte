@@ -7,8 +7,10 @@
 		Link2,
 		MessageSquareText,
 		Notebook,
+		Ruler,
 		ShoppingBasket
 	} from 'lucide-svelte';
+	import { metricEventSummary } from '$lib/pocketbase/data';
 	import { editorText, firstNonEmptyLine, formatDate, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
 	import type { PageData } from './$types';
 
@@ -47,6 +49,10 @@
 
 	function needDetail(thing: PageData['needs'][number]) {
 		return editorText(thing.notes) || thing.expand?.location?.name || 'Needs attention';
+	}
+
+	function metricDetail(event: PageData['recentMetrics'][number]) {
+		return metricEventSummary(event) || event.title || 'Measurement';
 	}
 </script>
 
@@ -137,6 +143,32 @@
 			</ul>
 		{:else}
 			<p class="empty-state">No quick notes yet.</p>
+		{/if}
+	</article>
+
+	<article class="panel dashboard-section">
+		<div class="panel-heading">
+			<div>
+				<p class="eyebrow">Metrics</p>
+				<h2>Recent Measurements</h2>
+			</div>
+			<span class="soft-icon"><Ruler size={20} /></span>
+		</div>
+		{#if data.recentMetrics.length}
+			<ul class="record-list dashboard-record-list">
+				{#each data.recentMetrics as event}
+					<li>
+						<div>
+							<a class="record-title-link" href="/metrics">{metricDetail(event)}</a>
+							<span>{event.expand?.thing?.name ?? 'Measurement'}</span>
+						</div>
+						<time datetime={event.happened_at || event.created}>{formatDateTime(event.happened_at || event.created)}</time>
+					</li>
+				{/each}
+			</ul>
+			<a class="secondary-action compact icon-text" href="/metrics">View metrics</a>
+		{:else}
+			<p class="empty-state">No measurements saved yet.</p>
 		{/if}
 	</article>
 

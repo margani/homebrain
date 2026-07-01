@@ -29,7 +29,10 @@ function matchesFilter(record: RecordLike, filter = '') {
 	} else {
 		if (filter.includes('event_type = "note"') && record.event_type !== 'note') return false;
 		if (filter.includes('event_type = "activity"') && record.event_type !== 'activity') return false;
+		if (filter.includes('event_type = "metric"') && record.event_type !== 'metric') return false;
 	}
+	const thingMatch = filter.match(/thing = "([^"]+)"/);
+	if (thingMatch && record.thing !== thingMatch[1]) return false;
 	if (filter.includes('type = "inventory"') && record.type !== 'inventory') return false;
 	if (filter.includes('active = true') && record.active !== true) return false;
 	if (filter.includes('thing != ""') && !record.thing) return false;

@@ -23,10 +23,10 @@ Playwright tests route all PocketBase API calls to an in-memory mock at `http://
 ## Current Coverage
 
 - Date, formatting, activity duration, note metadata, and Things filtering helpers.
-- Core PocketBase mutations: quick capture, log as activity, link to thing, add to buy list, and routine done.
+- Core PocketBase mutations: quick capture, log as activity, link to thing, add a need, add a metric observation, and routine done.
 - Cache invalidation for inbox count, Things, and note/activity archive.
 - Component behavior for Quick Capture, Inbox triage expansion, and Things list/tile mode.
-- Browser smoke tests for login guard, Today, Inbox activity logging, Activities, Things, Notes, and Dashboard.
+- Browser smoke tests for login guard, Today, Inbox activity/need/metric logging, Activities, Things, Metrics, Notes, and Dashboard.
 
 ## Not Covered Yet
 

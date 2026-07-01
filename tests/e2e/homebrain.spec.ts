@@ -69,6 +69,25 @@ test.describe('authenticated app smoke tests', () => {
 		await expect(coffee).not.toBeVisible();
 	});
 
+	test('Something I measured creates a metric event and a categorized thing', async ({ page }) => {
+		await page.goto('/inbox');
+
+		await page.getByRole('button', { name: /^review$/i }).click();
+		await page.getByRole('button', { name: /something i measured/i }).click();
+		await page.getByRole('textbox', { name: 'Metric name' }).fill('Waist');
+		await page.getByRole('spinbutton', { name: 'Value' }).fill('105');
+		await page.getByRole('textbox', { name: 'Unit' }).fill('cm');
+		await page.getByRole('textbox', { name: /category for new topic optional/i }).fill('Health');
+		await expect(page.getByLabel(/quantity/i)).toHaveCount(0);
+		await page.getByRole('button', { name: /^save measurement$/i }).click();
+		await expect(page.getByText('Inbox is clear')).toBeVisible();
+
+		await page.goto('/metrics');
+		await expect(page.getByRole('heading', { name: 'Measurements' })).toBeVisible();
+		await expect(page.locator('.metric-card').filter({ hasText: 'Waist' })).toContainText('105 cm');
+		await expect(page.locator('.metric-card').filter({ hasText: 'Waist' })).toContainText('Health');
+	});
+
 	test('things page renders list view and filters by type', async ({ page }) => {
 		await page.goto('/things');
 
@@ -78,6 +97,34 @@ test.describe('authenticated app smoke tests', () => {
 		await page.goto('/things?type=routine');
 		await expect(page.getByText('Water plants')).toBeVisible();
 		await expect(page.getByText('Coffee beans')).not.toBeVisible();
+	});
+
+	test('category appears on Things list and detail, and category filter works', async ({ page }) => {
+		await page.goto('/things');
+
+		await expect(page.locator('article').filter({ hasText: 'Coffee beans' })).toContainText('Groceries');
+		await page.getByLabel('Category').selectOption('Health');
+		await expect(page.getByRole('link', { name: 'Weight', exact: true })).toBeVisible();
+		await expect(page.getByText('Coffee beans')).not.toBeVisible();
+
+		await page.goto('/things/thing_weight');
+		await expect(page.getByRole('heading', { name: 'Weight' })).toBeVisible();
+		await expect(page.getByText('Health').first()).toBeVisible();
+	});
+
+	test('Thing detail and Metrics page list metric events', async ({ page }) => {
+		await page.goto('/things/thing_weight');
+
+		await expect(page.getByRole('heading', { name: 'Measurements' })).toBeVisible();
+		await expect(page.getByText('94 kg')).toBeVisible();
+		await expect(page.getByText('Morning weigh-in')).toBeVisible();
+
+		await page.goto('/metrics');
+		await expect(page.locator('.metric-card').filter({ hasText: 'Weight' })).toContainText('94 kg');
+		await expect(page.locator('.metric-card').filter({ hasText: 'Coffee beans' })).toContainText('2 bags');
+		await page.getByLabel('Unit').selectOption('kg');
+		await expect(page.locator('.metric-card').filter({ hasText: 'Weight' })).toBeVisible();
+		await expect(page.locator('.metric-card').filter({ hasText: 'Coffee beans' })).not.toBeVisible();
 	});
 
 	test('quantity fields are not shown in Things or Needs UI', async ({ page }) => {
@@ -109,5 +156,7 @@ test.describe('authenticated app smoke tests', () => {
 		await expect(page.getByRole('link', { name: /inbox to review/i })).toBeVisible();
 		await expect(page.getByRole('link', { name: /needs open/i })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Open Needs' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Recent Measurements' })).toBeVisible();
+		await expect(page.getByText('Weight: 94 kg')).toBeVisible();
 	});
 });

@@ -11,6 +11,7 @@
 		LogOut,
 		MessageSquareText,
 		NotebookText,
+		Ruler,
 		Search,
 		Settings,
 		ShoppingBasket,
@@ -36,6 +37,7 @@
 		{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 		{ href: '/inbox', label: 'Inbox', icon: Inbox },
 		{ href: '/needs', label: 'Needs', icon: ShoppingBasket },
+		{ href: '/metrics', label: 'Metrics', icon: Ruler },
 		{ href: '/notes', label: 'Notes', icon: NotebookText },
 		{ href: '/activities', label: 'Activities', icon: Activity },
 		{ href: '/things', label: 'Things', icon: Boxes },
@@ -47,6 +49,7 @@
 		(item) =>
 			item.href !== '/dashboard' &&
 			item.href !== '/needs' &&
+			item.href !== '/metrics' &&
 			item.href !== '/notes' &&
 			item.href !== '/activities'
 	);
@@ -96,6 +99,7 @@
 		const pathname = page.url.pathname;
 		if (href === '/things') return pathname.startsWith('/things');
 		if (href === '/needs') return pathname.startsWith('/needs');
+		if (href === '/metrics') return pathname.startsWith('/metrics');
 		if (href === '/notes') return pathname.startsWith('/notes');
 		if (href === '/activities') return pathname.startsWith('/activities');
 		return pathname === href;

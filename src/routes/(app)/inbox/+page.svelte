@@ -26,6 +26,7 @@
 	let pendingMessage = $state('Updating inbox...');
 	let inboxError = $state('');
 	let savedItemId = $state<string | null>(null);
+	let savedMessage = $state('Saved.');
 	let hideServerSaved = $state(false);
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -39,6 +40,27 @@
 
 	function titleFor(event: PageData['inboxItems'][number]) {
 		return event.title || firstNonEmptyLine(textFor(event)) || 'Untitled capture';
+	}
+
+	function hasDistinctBody(event: PageData['inboxItems'][number]) {
+		const title = titleFor(event).trim();
+		const text = textFor(event).trim();
+		return Boolean(text && text !== title);
+	}
+
+	function sourceFor(event: PageData['inboxItems'][number]) {
+		return textFor(event).trim() || titleFor(event).trim();
+	}
+
+	function sourceExcerptFor(event: PageData['inboxItems'][number]) {
+		const source = sourceFor(event);
+		if (source.length <= 140) return source;
+		return `${source.slice(0, 137)}...`;
+	}
+
+	function headingFor(action: InboxAction) {
+		if (action === 'metric') return 'Logging Metric';
+		return `Creating ${labelFromValue(action)}`;
 	}
 
 	function dateTimeInputValue(value?: string | null) {
@@ -70,8 +92,9 @@
 		inboxError = '';
 	}
 
-	function flashSaved(eventId: string) {
+	function flashSaved(eventId: string, message: string) {
 		savedItemId = eventId;
+		savedMessage = message;
 		hideServerSaved = false;
 		if (savedTimer) clearTimeout(savedTimer);
 		savedTimer = setTimeout(() => {
@@ -83,6 +106,7 @@
 	async function runInboxAction(
 		event: SubmitEvent,
 		message: string,
+		successMessage: string,
 		mutation: (formData: FormData, eventId: string) => Promise<void>
 	) {
 		event.preventDefault();
@@ -107,7 +131,7 @@
 			await mutation(formData, eventId);
 			closeInlineReview();
 			removedInboxItemIds = [...removedInboxItemIds, eventId];
-			flashSaved(eventId);
+			flashSaved(eventId, successMessage);
 			refreshInboxCount();
 		} catch (error) {
 			inboxError = error instanceof Error ? error.message : 'The inbox item could not be updated.';
@@ -208,7 +232,15 @@
 			...(notes ? { notes } : {})
 		});
 	}
+
 </script>
+
+{#snippet formHeader(action: InboxAction, item: PageData['inboxItems'][number])}
+	<div class="inbox-form-header">
+		<p class="eyebrow">{headingFor(action)}</p>
+		<p dir="auto">From quick capture: {sourceExcerptFor(item)}</p>
+	</div>
+{/snippet}
 
 <svelte:head>
 	<title>Inbox - HomeBrain</title>
@@ -231,67 +263,77 @@
 {#if inboxItems.length}
 	<section class="inbox-list">
 		{#each inboxItems as item}
-			<article class="panel inbox-card pending-region">
+			<article class="panel inbox-card pending-region" class:reviewing={activeItemId === item.id && activeAction}>
 				<PendingOverlay active={pendingItemId === item.id} message={pendingMessage} />
 
 				<div class="inbox-card-header">
 					<div>
 						<p class="eyebrow">Quick Capture</p>
-						<h2>{titleFor(item)}</h2>
+						<h2 dir="auto">{titleFor(item)}</h2>
 					</div>
-					<time datetime={item.happened_at || item.created}>{formatDateTime(item.happened_at || item.created)}</time>
+					<div class="review-card-meta">
+						{#if activeItemId === item.id && activeAction}
+							<span class="status-pill review-active-badge">Reviewing</span>
+						{/if}
+						<time datetime={item.happened_at || item.created}>{formatDateTime(item.happened_at || item.created)}</time>
+					</div>
 				</div>
 
-				{#if textFor(item)}
-					<p class="plain-note">{textFor(item)}</p>
+				{#if hasDistinctBody(item)}
+					<p class="plain-note" dir="auto">{textFor(item)}</p>
 				{/if}
 
 				{#if savedItemId === item.id && !hideServerSaved}
-					<p class="notice success">Saved</p>
+					<p class="notice success">{savedMessage}</p>
 				{/if}
 
 				<div class="inbox-card-actions review-action-row">
-					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'note')} disabled={Boolean(pendingItemId)}>
-						<FileText size={16} />
-						Create Note
-					</button>
-					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'activity')} disabled={Boolean(pendingItemId)}>
-						<Activity size={16} />
-						Create Activity
-					</button>
-					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'need')} disabled={Boolean(pendingItemId)}>
-						<ShoppingBasket size={16} />
-						Create Need
-					</button>
-					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'thing')} disabled={Boolean(pendingItemId)}>
-						<Boxes size={16} />
-						Create Thing
-					</button>
-					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'metric')} disabled={Boolean(pendingItemId)}>
-						<Ruler size={16} />
-						Log Metric
-					</button>
-					<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Dismissing...', dismissNote)}>
-						<input type="hidden" name="event_id" value={item.id} />
-						<button class="ghost-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-							<X size={16} />
-							Dismiss
+					<div class="review-action-group review-create-actions">
+						<button class="secondary-action compact" class:active={activeItemId === item.id && activeAction === 'note'} aria-pressed={activeItemId === item.id && activeAction === 'note'} type="button" onclick={() => chooseAction(item.id, 'note')} disabled={Boolean(pendingItemId)}>
+							<FileText size={16} />
+							Create Note
 						</button>
-					</form>
-					<button class="ghost-action compact" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>
-						Later
-					</button>
+						<button class="secondary-action compact" class:active={activeItemId === item.id && activeAction === 'activity'} aria-pressed={activeItemId === item.id && activeAction === 'activity'} type="button" onclick={() => chooseAction(item.id, 'activity')} disabled={Boolean(pendingItemId)}>
+							<Activity size={16} />
+							Create Activity
+						</button>
+						<button class="secondary-action compact" class:active={activeItemId === item.id && activeAction === 'need'} aria-pressed={activeItemId === item.id && activeAction === 'need'} type="button" onclick={() => chooseAction(item.id, 'need')} disabled={Boolean(pendingItemId)}>
+							<ShoppingBasket size={16} />
+							Create Need
+						</button>
+						<button class="secondary-action compact" class:active={activeItemId === item.id && activeAction === 'thing'} aria-pressed={activeItemId === item.id && activeAction === 'thing'} type="button" onclick={() => chooseAction(item.id, 'thing')} disabled={Boolean(pendingItemId)}>
+							<Boxes size={16} />
+							Create Thing
+						</button>
+						<button class="secondary-action compact" class:active={activeItemId === item.id && activeAction === 'metric'} aria-pressed={activeItemId === item.id && activeAction === 'metric'} type="button" onclick={() => chooseAction(item.id, 'metric')} disabled={Boolean(pendingItemId)}>
+							<Ruler size={16} />
+							Log Metric
+						</button>
+					</div>
+					<div class="review-action-group review-state-actions">
+						<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Dismissing...', 'Inbox item dismissed.', dismissNote)}>
+							<input type="hidden" name="event_id" value={item.id} />
+							<button class="ghost-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+								<X size={16} />
+								Dismiss
+							</button>
+						</form>
+						<button class="ghost-action compact" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>
+							Later
+						</button>
+					</div>
 				</div>
 
 				{#if activeItemId === item.id && activeAction}
 					<div class="inbox-inline-review">
 						{#if activeAction === 'note'}
-							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating note...', saveNote)}>
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating note...', 'Note created from inbox item.', saveNote)}>
 								<input type="hidden" name="event_id" value={item.id} />
+								{@render formHeader('note', item)}
 								<div class="inbox-form-grid">
 									<label>
 										Title
-										<input name="title" value={titleFor(item)} required autocomplete="off" />
+										<input name="title" value={titleFor(item)} required autocomplete="off" dir="auto" />
 									</label>
 									<label>
 										Category optional
@@ -299,7 +341,7 @@
 									</label>
 									<label class="wide-field">
 										Body
-										<textarea name="body" rows="4">{textFor(item)}</textarea>
+										<textarea name="body" rows="4" dir="auto">{textFor(item)}</textarea>
 									</label>
 								</div>
 								<div class="inbox-form-actions">
@@ -307,16 +349,17 @@
 										<Check size={16} />
 										Save note
 									</button>
-									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Cancel</button>
 								</div>
 							</form>
 						{:else if activeAction === 'activity'}
-							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating activity...', saveActivity)}>
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating activity...', 'Activity created from inbox item.', saveActivity)}>
 								<input type="hidden" name="event_id" value={item.id} />
+								{@render formHeader('activity', item)}
 								<div class="inbox-form-grid">
 									<label>
 										Title
-										<input name="title" value={titleFor(item)} required autocomplete="off" />
+										<input name="title" value={titleFor(item)} required autocomplete="off" dir="auto" />
 									</label>
 									<label>
 										Date and time
@@ -328,7 +371,7 @@
 									</label>
 									<label class="wide-field">
 										Notes
-										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+										<textarea name="notes" rows="3" dir="auto">{textFor(item)}</textarea>
 									</label>
 								</div>
 								<div class="inbox-form-actions">
@@ -336,16 +379,17 @@
 										<Check size={16} />
 										Save activity
 									</button>
-									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Cancel</button>
 								</div>
 							</form>
 						{:else if activeAction === 'need'}
-							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating need...', saveNeed)}>
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating need...', 'Need created from inbox item.', saveNeed)}>
 								<input type="hidden" name="event_id" value={item.id} />
+								{@render formHeader('need', item)}
 								<div class="inbox-form-grid">
 									<label>
 										Title
-										<input name="title" value={titleFor(item)} required autocomplete="off" />
+										<input name="title" value={titleFor(item)} required autocomplete="off" dir="auto" />
 									</label>
 									<label>
 										Status
@@ -361,7 +405,7 @@
 									</label>
 									<label class="wide-field">
 										Notes
-										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+										<textarea name="notes" rows="3" dir="auto">{textFor(item)}</textarea>
 									</label>
 								</div>
 								<div class="inbox-form-actions">
@@ -369,16 +413,17 @@
 										<Check size={16} />
 										Save need
 									</button>
-									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Cancel</button>
 								</div>
 							</form>
 						{:else if activeAction === 'thing'}
-							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating thing...', saveThing)}>
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating thing...', 'Thing created from inbox item.', saveThing)}>
 								<input type="hidden" name="event_id" value={item.id} />
+								{@render formHeader('thing', item)}
 								<div class="inbox-form-grid">
 									<label>
 										Name
-										<input name="name" value={titleFor(item)} required autocomplete="off" />
+										<input name="name" value={titleFor(item)} required autocomplete="off" dir="auto" />
 									</label>
 									<label>
 										Category optional
@@ -386,7 +431,7 @@
 									</label>
 									<label class="wide-field">
 										Notes
-										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+										<textarea name="notes" rows="3" dir="auto">{textFor(item)}</textarea>
 									</label>
 								</div>
 								<div class="inbox-form-actions">
@@ -394,16 +439,17 @@
 										<Check size={16} />
 										Save thing
 									</button>
-									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Cancel</button>
 								</div>
 							</form>
 						{:else if activeAction === 'metric'}
-							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Logging metric...', saveMetric)}>
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Logging metric...', 'Metric logged from inbox item.', saveMetric)}>
 								<input type="hidden" name="event_id" value={item.id} />
+								{@render formHeader('metric', item)}
 								<div class="inbox-form-grid">
 									<label>
 										Measurement
-										<input name="measurement" value={titleFor(item)} required autocomplete="off" />
+										<input name="measurement" value={titleFor(item)} required autocomplete="off" dir="auto" />
 									</label>
 									<label>
 										Value
@@ -428,7 +474,7 @@
 									</label>
 									<label class="wide-field">
 										Notes
-										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+										<textarea name="notes" rows="3" dir="auto">{textFor(item)}</textarea>
 									</label>
 								</div>
 								<div class="inbox-form-actions">
@@ -436,7 +482,7 @@
 										<Check size={16} />
 										Save metric
 									</button>
-									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Cancel</button>
 								</div>
 							</form>
 						{/if}

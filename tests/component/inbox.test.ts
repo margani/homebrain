@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import InboxPage from '../../src/routes/(app)/inbox/+page.svelte';
@@ -46,6 +46,8 @@ describe('Inbox card', () => {
 		renderInbox();
 
 		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
+		expect(screen.getByText('Buy coffee')).toHaveAttribute('dir', 'auto');
+		expect(screen.getByText('Buy coffee beans')).toHaveAttribute('dir', 'auto');
 		expect(screen.getByRole('button', { name: /create note/i })).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /create activity/i })).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /create need/i })).toBeInTheDocument();
@@ -60,12 +62,18 @@ describe('Inbox card', () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /create note/i }));
+		const createNoteButton = screen.getByRole('button', { name: /create note/i });
+		await user.click(createNoteButton);
 
+		expect(createNoteButton).toHaveAttribute('aria-pressed', 'true');
+		expect(screen.getByText('Reviewing')).toBeInTheDocument();
+		expect(screen.getByText('Creating Note')).toBeInTheDocument();
+		expect(screen.getByText(/From quick capture: Buy coffee beans/i)).toHaveAttribute('dir', 'auto');
 		expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/category optional/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/^body$/i)).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /^save note$/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
 	});
 
 	it('Create Activity opens the activity form inline', async () => {
@@ -81,16 +89,29 @@ describe('Inbox card', () => {
 		expect(screen.getByRole('button', { name: /^save activity$/i })).toBeInTheDocument();
 	});
 
-	it('Later closes the inline form without changing the item', async () => {
+	it('Cancel closes the inline form without changing the item', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
 		await user.click(screen.getByRole('button', { name: /create activity/i }));
 		expect(screen.getByRole('button', { name: /^save activity$/i })).toBeInTheDocument();
 
-		await user.click(screen.getAllByRole('button', { name: /^later$/i }).at(-1)!);
+		await user.click(screen.getByRole('button', { name: /^cancel$/i }));
 
 		expect(screen.queryByRole('button', { name: /^save activity$/i })).not.toBeInTheDocument();
+		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
+	});
+
+	it('action-row Later closes an open form without reviewing the item', async () => {
+		const user = userEvent.setup();
+		renderInbox();
+
+		await user.click(screen.getByRole('button', { name: /create activity/i }));
+		expect(screen.getByText('Creating Activity')).toBeInTheDocument();
+
+		await user.click(screen.getByRole('button', { name: /^later$/i }));
+
+		expect(screen.queryByText('Creating Activity')).not.toBeInTheDocument();
 		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
 	});
 
@@ -100,6 +121,8 @@ describe('Inbox card', () => {
 
 		await user.click(screen.getByRole('button', { name: /create need/i }));
 
+		expect(screen.getByRole('button', { name: /create need/i })).toHaveAttribute('aria-pressed', 'true');
+		expect(screen.getByText('Creating Need')).toBeInTheDocument();
 		expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/^status$/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/category optional/i)).toBeInTheDocument();
@@ -114,6 +137,8 @@ describe('Inbox card', () => {
 
 		await user.click(screen.getByRole('button', { name: /log metric/i }));
 
+		expect(screen.getByRole('button', { name: /log metric/i })).toHaveAttribute('aria-pressed', 'true');
+		expect(screen.getByText('Logging Metric')).toBeInTheDocument();
 		expect(screen.getByLabelText(/measurement/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/^value$/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/^unit$/i)).toBeInTheDocument();

@@ -318,9 +318,11 @@
 								Dismiss
 							</button>
 						</form>
-						<button class="ghost-action compact" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>
-							Later
-						</button>
+						{#if !(activeItemId === item.id && activeAction)}
+							<button class="ghost-action compact" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>
+								Later
+							</button>
+						{/if}
 					</div>
 				</div>
 

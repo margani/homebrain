@@ -74,6 +74,8 @@ describe('Inbox card', () => {
 		expect(screen.getByLabelText(/^body$/i)).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /^save note$/i })).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^dismiss$/i })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^later$/i })).not.toBeInTheDocument();
 	});
 
 	it('Create Activity opens the activity form inline', async () => {
@@ -102,17 +104,32 @@ describe('Inbox card', () => {
 		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
 	});
 
-	it('action-row Later closes an open form without reviewing the item', async () => {
+	it('action-row Later is hidden while an inline form is open', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
+		expect(screen.getByRole('button', { name: /^later$/i })).toBeInTheDocument();
+
 		await user.click(screen.getByRole('button', { name: /create activity/i }));
 		expect(screen.getByText('Creating Activity')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^later$/i })).not.toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^dismiss$/i })).toBeInTheDocument();
+	});
 
-		await user.click(screen.getByRole('button', { name: /^later$/i }));
+	it('switches between create/log actions while a form is open', async () => {
+		const user = userEvent.setup();
+		renderInbox();
 
-		expect(screen.queryByText('Creating Activity')).not.toBeInTheDocument();
-		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: /create need/i }));
+		expect(screen.getByText('Creating Need')).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /create need/i })).toHaveAttribute('aria-pressed', 'true');
+
+		await user.click(screen.getByRole('button', { name: /log metric/i }));
+
+		expect(screen.queryByText('Creating Need')).not.toBeInTheDocument();
+		expect(screen.getByText('Logging Metric')).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /create need/i })).toHaveAttribute('aria-pressed', 'false');
+		expect(screen.getByRole('button', { name: /log metric/i })).toHaveAttribute('aria-pressed', 'true');
 	});
 
 	it('Create Need shows status and no quantity fields', async () => {

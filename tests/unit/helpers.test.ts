@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseActivityDurationMinutes, formatActivityDuration } from '../../src/lib/pocketbase/activity';
+import { toAuthUser } from '../../src/lib/pocketbase/auth';
 import {
 	activityMetadataFor,
 	isActivityNoteArchiveEvent,
@@ -14,6 +15,12 @@ import {
 import { editorText, firstNonEmptyLine, formatDateTime, labelFromValue } from '../../src/lib/pocketbase/format';
 import { filterAndSortThings, isNeedsStatus, thingLocationSummary, uniqueThingCategories } from '../../src/lib/pocketbase/things';
 import { fixtureEvents, fixtureThings } from '../fixtures/homebrain';
+
+describe('auth helpers', () => {
+	it('does not create an auth user without a record id', () => {
+		expect(toAuthUser({ email: 'missing-id@example.com' } as never)).toBeNull();
+	});
+});
 
 describe('date and formatting helpers', () => {
 	it('creates local date keys', () => {

@@ -6,6 +6,8 @@ export function toAuthUser(record: AuthRecord, pb?: PocketBase): AuthUser | null
 	if (!record) return null;
 
 	const user = record as UserRecord;
+	if (!user.id) return null;
+
 	const avatar = user.avatar ?? '';
 
 	return {

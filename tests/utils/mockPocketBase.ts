@@ -39,6 +39,8 @@ function matchesFilter(record: RecordLike, filter = '') {
 	if (filter.includes('next_due_at != ""') && !record.next_due_at) return false;
 	if (filter.includes('metadata.reviewed != true') && getValue(record, 'metadata.reviewed') === true) return false;
 	if (filter.includes('metadata.processed != true') && getValue(record, 'metadata.processed') === true) return false;
+	if (filter.includes('metadata.reviewStatus != "completed"') && getValue(record, 'metadata.reviewStatus') === 'completed') return false;
+	if (filter.includes('metadata.reviewStatus != "dismissed"') && getValue(record, 'metadata.reviewStatus') === 'dismissed') return false;
 	if (
 		filter.includes('status = "needed"') ||
 		filter.includes('status = "low"') ||

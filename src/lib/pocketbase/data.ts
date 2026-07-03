@@ -31,6 +31,7 @@ export interface MetricObservationInput {
 	category?: string;
 	value: number;
 	unit: string;
+	happened_at?: string;
 	label?: string;
 	notes?: string;
 }
@@ -56,9 +57,23 @@ export interface ActivityLogInput {
 	notes?: string;
 }
 
+export interface ReviewNoteInput {
+	title: string;
+	notes?: string;
+	category?: string;
+}
+
+export interface ReviewActivityInput {
+	title: string;
+	happened_at?: string;
+	category?: string;
+	notes?: string;
+}
+
 export interface NeedConversionInput {
 	name?: string;
 	status?: 'needed' | 'low' | 'empty';
+	category?: string;
 	notes?: string;
 	topicId?: string;
 }
@@ -74,6 +89,7 @@ export const noteArchiveFilters = [
 
 export type NoteArchiveFilter = (typeof noteArchiveFilters)[number];
 export type NoteReviewState = 'new' | 'reviewed' | 'dismissed';
+export type ReviewTargetType = 'notes' | 'activities' | 'needs' | 'things' | 'metrics';
 
 export interface ActiveThingSummary {
 	id: string;
@@ -195,13 +211,46 @@ function noteEventName(event: EventRecord) {
 	return event.title || firstNonEmptyLine(event.notes ?? '') || 'Untitled capture';
 }
 
+function reviewMetadata(
+	event: EventRecord,
+	status: 'completed' | 'dismissed',
+	target?: { type: ReviewTargetType; id: string },
+	extra: Record<string, JsonValue> = {}
+) {
+	const metadata: Record<string, JsonValue> = {
+		...recordMetadata(event),
+		reviewed: true,
+		reviewStatus: status,
+		reviewedAt: new Date().toISOString(),
+		...extra
+	};
+	delete metadata.processed;
+
+	if (status === 'dismissed') {
+		metadata.dismissed = true;
+	}
+
+	if (target) {
+		metadata.reviewTargetType = target.type;
+		metadata.reviewTargetId = target.id;
+	}
+
+	return metadata;
+}
+
 function isNoteArchiveEvent(event: EventRecord) {
 	return event.event_type === 'note' || event.event_type === 'activity';
 }
 
 export function isNewNoteArchiveEvent(event: EventRecord) {
 	const metadata = recordMetadata(event);
-	return metadata.reviewed !== true && metadata.processed !== true && metadata.dismissed !== true;
+	return (
+		metadata.reviewed !== true &&
+		metadata.processed !== true &&
+		metadata.dismissed !== true &&
+		metadata.reviewStatus !== 'completed' &&
+		metadata.reviewStatus !== 'dismissed'
+	);
 }
 
 export function isReviewedNoteArchiveEvent(event: EventRecord) {
@@ -372,7 +421,7 @@ export async function listUnreviewedNoteEvents(pb: PocketBase, userId: string, l
 	try {
 		const result = await pb.collection('events').getList<EventRecord>(1, limit, {
 			filter: pb.filter(
-				'user = {:userId} && event_type = "note" && metadata.reviewed != true && metadata.processed != true',
+				'user = {:userId} && event_type = "note" && metadata.reviewed != true && metadata.processed != true && metadata.reviewStatus != "completed" && metadata.reviewStatus != "dismissed"',
 				{ userId }
 			),
 			sort: '-happened_at,-created'
@@ -388,7 +437,12 @@ export async function listUnreviewedNoteEvents(pb: PocketBase, userId: string, l
 		return result.items
 			.filter((event) => {
 				const metadata = recordMetadata(event);
-				return metadata.reviewed !== true && metadata.processed !== true;
+				return (
+					metadata.reviewed !== true &&
+					metadata.processed !== true &&
+					metadata.reviewStatus !== 'completed' &&
+					metadata.reviewStatus !== 'dismissed'
+				);
 			})
 			.slice(0, limit);
 	}
@@ -412,7 +466,7 @@ export async function countReviewInboxNotes(pb: PocketBase, userId: string) {
 	try {
 		const result = await pb.collection('events').getList<EventRecord>(1, 1, {
 			filter: pb.filter(
-				'user = {:userId} && event_type = "note" && metadata.reviewed != true && metadata.processed != true',
+				'user = {:userId} && event_type = "note" && metadata.reviewed != true && metadata.processed != true && metadata.reviewStatus != "completed" && metadata.reviewStatus != "dismissed"',
 				{ userId }
 			)
 		});
@@ -426,7 +480,12 @@ export async function countReviewInboxNotes(pb: PocketBase, userId: string) {
 
 		return events.filter((event) => {
 			const metadata = recordMetadata(event);
-			return metadata.reviewed !== true && metadata.processed !== true;
+			return (
+				metadata.reviewed !== true &&
+				metadata.processed !== true &&
+				metadata.reviewStatus !== 'completed' &&
+				metadata.reviewStatus !== 'dismissed'
+			);
 		}).length;
 	}
 }
@@ -612,12 +671,14 @@ export async function markNoteEventReviewed(
 ) {
 	const event = await pb.collection('events').getOne<EventRecord>(eventId);
 	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
-	const nextMetadata: Record<string, JsonValue> = {
-		...recordMetadata(event),
-		reviewed: true,
-		...metadata
-	};
-	delete nextMetadata.processed;
+	const nextMetadata = reviewMetadata(
+		event,
+		metadata.dismissed === true ? 'dismissed' : 'completed',
+		typeof metadata.reviewTargetType === 'string' && typeof metadata.reviewTargetId === 'string'
+			? { type: metadata.reviewTargetType as ReviewTargetType, id: metadata.reviewTargetId }
+			: undefined,
+		metadata
+	);
 
 	const updated = await pb.collection('events').update<EventRecord>(eventId, {
 		metadata: nextMetadata
@@ -641,12 +702,20 @@ export async function setNoteEventReviewState(
 	if (state === 'new') {
 		metadata.reviewed = false;
 		metadata.dismissed = false;
+		metadata.reviewStatus = 'pending';
+		delete metadata.reviewedAt;
+		delete metadata.reviewTargetType;
+		delete metadata.reviewTargetId;
 	} else if (state === 'dismissed') {
 		metadata.reviewed = true;
 		metadata.dismissed = true;
+		metadata.reviewStatus = 'dismissed';
+		metadata.reviewedAt = new Date().toISOString();
 	} else {
 		metadata.reviewed = true;
 		metadata.dismissed = false;
+		metadata.reviewStatus = 'completed';
+		metadata.reviewedAt = new Date().toISOString();
 	}
 
 	const updated = await pb.collection('events').update<EventRecord>(
@@ -688,6 +757,76 @@ export async function logNoteEventAsActivity(
 	const updated = await pb.collection('events').update<EventRecord>(eventId, payload);
 	invalidateNoteArchiveCache();
 	return updated;
+}
+
+export async function createNoteFromNoteEvent(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	input: ReviewNoteInput
+) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+	if (event.event_type !== 'note') throw new Error('Only note events can become reviewed notes.');
+
+	const title = input.title.trim() || noteEventName(event);
+	const notes = input.notes?.trim() || event.notes || '';
+	const note = await pb.collection('events').create<EventRecord>({
+		user: userId,
+		event_type: 'note',
+		title,
+		notes,
+		happened_at: new Date().toISOString(),
+		metadata: {
+			reviewed: true,
+			reviewStatus: 'completed',
+			source_event_id: event.id,
+			...(input.category?.trim() ? { category: input.category.trim() } : {})
+		}
+	});
+
+	await markNoteEventReviewed(pb, userId, eventId, {
+		reviewed_as: 'note',
+		reviewTargetType: 'notes',
+		reviewTargetId: note.id
+	});
+
+	return note;
+}
+
+export async function createActivityFromNoteEvent(
+	pb: PocketBase,
+	userId: string,
+	eventId: string,
+	input: ReviewActivityInput
+) {
+	const event = await pb.collection('events').getOne<EventRecord>(eventId);
+	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
+	if (event.event_type !== 'note') throw new Error('Only note events can become activities.');
+
+	const title = input.title.trim() || noteEventName(event);
+	const activity = await pb.collection('events').create<EventRecord>({
+		user: userId,
+		event_type: 'activity',
+		title,
+		notes: input.notes?.trim() || event.notes || '',
+		happened_at: input.happened_at || new Date().toISOString(),
+		metadata: {
+			reviewed: true,
+			reviewStatus: 'completed',
+			source_event_id: event.id,
+			activity_type: 'other',
+			...(input.category?.trim() ? { category: input.category.trim() } : {})
+		}
+	});
+
+	await markNoteEventReviewed(pb, userId, eventId, {
+		reviewed_as: 'activity',
+		reviewTargetType: 'activities',
+		reviewTargetId: activity.id
+	});
+
+	return activity;
 }
 
 export async function completeRoutine(pb: PocketBase, userId: string, routineId: string) {
@@ -881,7 +1020,7 @@ export async function createMetricObservation(
 		event_type: 'metric',
 		title: `${metricLabel}: ${value} ${unit}`,
 		notes: input.notes?.trim() || '',
-		happened_at: new Date().toISOString(),
+		happened_at: input.happened_at || new Date().toISOString(),
 		metadata: {
 			metric_value: value,
 			metric_unit: unit,
@@ -938,21 +1077,27 @@ export async function createThingFromNoteEvent(
 	userId: string,
 	eventId: string,
 	type: ThingType = 'other',
-	status: ThingStatus = 'unknown'
+	status: ThingStatus = 'unknown',
+	category = '',
+	nameOverride?: string,
+	notesOverride?: string
 ) {
 	const event = await pb.collection('events').getOne<EventRecord>(eventId);
 	if (event.user !== userId) throw new Error('Event does not belong to the current user.');
 
 	const thing = await createThing(pb, userId, {
-		name: noteEventName(event),
+		name: nameOverride?.trim() || noteEventName(event),
 		type,
 		status,
-		notes: event.notes || ''
+		category,
+		notes: notesOverride?.trim() || event.notes || ''
 	});
 
 	await markNoteEventReviewed(pb, userId, eventId, {
 		reviewed_as: 'thing',
-		thing_id: thing.id
+		thing_id: thing.id,
+		reviewTargetType: 'things',
+		reviewTargetId: thing.id
 	});
 
 	return thing;
@@ -986,7 +1131,9 @@ export async function createRoutineFromNoteEvent(
 	await markNoteEventReviewed(pb, userId, eventId, {
 		reviewed_as: 'routine',
 		thing_id: thing.id,
-		routine_id: routine.id
+		routine_id: routine.id,
+		reviewTargetType: 'things',
+		reviewTargetId: thing.id
 	});
 
 	return { thing, routine };
@@ -1006,7 +1153,9 @@ export async function createMetricObservationFromNoteEvent(
 	await markNoteEventReviewed(pb, userId, eventId, {
 		reviewed_as: 'metric',
 		thing_id: result.thing.id,
-		metric_event_id: result.event.id
+		metric_event_id: result.event.id,
+		reviewTargetType: 'metrics',
+		reviewTargetId: result.event.id
 	});
 
 	return result;
@@ -1036,7 +1185,7 @@ export async function addNoteEventToNeed(
 			}
 		: existingThing?.metadata;
 	const thing = existing.items[0]
-		? await updateThing(pb, existingThing.id, {
+			? await updateThing(pb, existingThing.id, {
 				name,
 					type: 'inventory',
 					status,
@@ -1049,13 +1198,16 @@ export async function addNoteEventToNeed(
 				name,
 				type: 'inventory',
 				status,
+				category: input.category || '',
 				notes,
 				metadata
 			});
 
 	await markNoteEventReviewed(pb, userId, eventId, {
 		reviewed_as: 'need',
-		thing_id: thing.id
+		thing_id: thing.id,
+		reviewTargetType: 'needs',
+		reviewTargetId: thing.id
 	});
 
 	return thing;

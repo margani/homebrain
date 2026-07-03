@@ -58,6 +58,12 @@ function filterCollection(name: string, records: any[], url: URL, allThings = fi
 	if (filter.includes('metadata.processed != true')) {
 		items = items.filter((item) => item.metadata?.processed !== true);
 	}
+	if (filter.includes('metadata.reviewStatus != "completed"')) {
+		items = items.filter((item) => item.metadata?.reviewStatus !== 'completed');
+	}
+	if (filter.includes('metadata.reviewStatus != "dismissed"')) {
+		items = items.filter((item) => item.metadata?.reviewStatus !== 'dismissed');
+	}
 	if (filter.includes('thing != ""')) {
 		items = items.filter((item) => item.thing);
 	}

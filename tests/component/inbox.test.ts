@@ -15,7 +15,10 @@ vi.mock('$lib/pocketbase/data', async () => {
 	return {
 		...actual,
 		addNoteEventToNeed: vi.fn(),
+		createActivityFromNoteEvent: vi.fn(),
 		createMetricObservationFromNoteEvent: vi.fn(),
+		createNoteFromNoteEvent: vi.fn(),
+		createThingFromNoteEvent: vi.fn(),
 		createRoutineFromNoteEvent: vi.fn(),
 		linkMemoryEventToThing: vi.fn(),
 		logNoteEventAsActivity: vi.fn(),
@@ -39,94 +42,84 @@ function renderInbox() {
 }
 
 describe('Inbox card', () => {
-	it('initially shows only the note and Review button', () => {
+	it('shows the note with review actions and no open form by default', () => {
 		renderInbox();
 
 		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^review$/i })).toBeInTheDocument();
-		expect(screen.queryByText('What is this?')).not.toBeInTheDocument();
-		expect(screen.queryByRole('button', { name: /something i did/i })).not.toBeInTheDocument();
-		expect(screen.queryByRole('button', { name: /^cancel$/i })).not.toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /create note/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /create activity/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /create need/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /create thing/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /log metric/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^later$/i })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^save note$/i })).not.toBeInTheDocument();
 	});
 
-	it('Review opens the meaning-first chooser', async () => {
+	it('Create Note opens the note form inline', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /^review$/i }));
+		await user.click(screen.getByRole('button', { name: /create note/i }));
 
-		const dialog = screen.getByRole('dialog', { name: /buy coffee/i });
-		expect(within(dialog).getByText('What is this?')).toBeInTheDocument();
-		expect(within(dialog).getByRole('button', { name: /something i did/i })).toBeInTheDocument();
-		expect(within(dialog).getByRole('button', { name: /something i need/i })).toBeInTheDocument();
-		expect(within(dialog).getByRole('button', { name: /something i measured/i })).toBeInTheDocument();
-		expect(within(dialog).getByRole('button', { name: /something worth remembering/i })).toBeInTheDocument();
-		expect(within(dialog).getByRole('button', { name: /something recurring/i })).toBeInTheDocument();
-		expect(within(dialog).getByRole('button', { name: /nothing important/i })).toBeInTheDocument();
+		expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/category optional/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^body$/i)).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^save note$/i })).toBeInTheDocument();
 	});
 
-	it('choosing Something I did shows only the activity form', async () => {
+	it('Create Activity opens the activity form inline', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /^review$/i }));
-		await user.click(screen.getByRole('button', { name: /something i did/i }));
+		await user.click(screen.getByRole('button', { name: /create activity/i }));
 
-		expect(screen.getByLabelText(/activity type/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/^duration$/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/link to topic optional/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/date and time/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/category optional/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^notes$/i)).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /^save activity$/i })).toBeInTheDocument();
-		expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
-		expect(screen.queryByLabelText(/routine name/i)).not.toBeInTheDocument();
 	});
 
-	it('Back returns to the meaning chooser and Cancel closes review', async () => {
+	it('Later closes the inline form without changing the item', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /^review$/i }));
-		await user.click(screen.getByRole('button', { name: /something i did/i }));
-		await user.click(screen.getByRole('button', { name: /^back$/i }));
+		await user.click(screen.getByRole('button', { name: /create activity/i }));
+		expect(screen.getByRole('button', { name: /^save activity$/i })).toBeInTheDocument();
 
-		expect(screen.getByRole('button', { name: /something i need/i })).toBeInTheDocument();
-		expect(screen.queryByLabelText(/^duration$/i)).not.toBeInTheDocument();
+		await user.click(screen.getAllByRole('button', { name: /^later$/i }).at(-1)!);
 
-		await user.click(screen.getByRole('button', { name: /^cancel$/i }));
-
-		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^review$/i })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^save activity$/i })).not.toBeInTheDocument();
+		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
 	});
 
-	it('choosing Something I need shows state choices and no quantity fields', async () => {
+	it('Create Need shows status and no quantity fields', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /^review$/i }));
-		await user.click(screen.getByRole('button', { name: /something i need/i }));
+		await user.click(screen.getByRole('button', { name: /create need/i }));
 
-		expect(screen.getByRole('button', { name: /need to buy/i })).toHaveAttribute('aria-pressed', 'true');
-		expect(screen.getByRole('button', { name: /running low/i })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /out of stock/i })).toBeInTheDocument();
-		expect(screen.getByLabelText(/^name$/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/optional note/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/link to topic optional/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^status$/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/category optional/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^notes$/i)).toBeInTheDocument();
 		expect(screen.queryByLabelText(/quantity/i)).not.toBeInTheDocument();
 		expect(screen.queryByPlaceholderText(/not bought yet/i)).not.toBeInTheDocument();
 	});
 
-	it('choosing Something I measured shows metric fields without quantity fields', async () => {
+	it('Log Metric shows metric fields without quantity fields', async () => {
 		const user = userEvent.setup();
 		renderInbox();
 
-		await user.click(screen.getByRole('button', { name: /^review$/i }));
-		await user.click(screen.getByRole('button', { name: /something i measured/i }));
+		await user.click(screen.getByRole('button', { name: /log metric/i }));
 
-		expect(screen.getByLabelText(/link to existing topic optional/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/metric name/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/measurement/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/^value$/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/^unit$/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/category for new topic optional/i)).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^save measurement$/i })).toBeInTheDocument();
+		expect(screen.getByLabelText(/date and time/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/thing optional/i)).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /^save metric$/i })).toBeInTheDocument();
 		expect(screen.queryByLabelText(/quantity/i)).not.toBeInTheDocument();
 	});
 });

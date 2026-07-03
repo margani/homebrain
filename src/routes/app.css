@@ -1384,7 +1384,18 @@ label > select:focus,
 
 .inbox-card-actions {
 	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 	justify-content: flex-end;
+}
+
+.review-action-row {
+	justify-content: flex-start;
+}
+
+.inbox-inline-review {
+	display: grid;
+	gap: 12px;
 }
 
 .inbox-triage {
@@ -1778,7 +1789,9 @@ label > select:focus,
 		justify-content: stretch;
 	}
 
-	.inbox-card-actions .primary-action {
+	.inbox-card-actions .primary-action,
+	.inbox-card-actions .secondary-action,
+	.inbox-card-actions .ghost-action {
 		width: 100%;
 	}
 

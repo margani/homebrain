@@ -29,25 +29,32 @@ test.describe('authenticated app smoke tests', () => {
 	test('inbox note can be logged as activity and activities page shows it', async ({ page }) => {
 		await page.goto('/inbox');
 
-		await page.getByRole('button', { name: /^review$/i }).click();
-		await page.getByRole('button', { name: /something i did/i }).click();
-		await page.getByRole('spinbutton', { name: 'Duration' }).fill('15');
+		await page.getByRole('button', { name: /create activity/i }).click();
 		await page.getByRole('button', { name: /^save activity$/i }).click();
 		await expect(page.getByText('Inbox is clear')).toBeVisible();
 
 		await page.goto('/activities');
 		await expect(page.getByRole('link', { name: 'Buy coffee', exact: true })).toBeVisible();
-		await expect(page.getByText('Walking · 15 min')).toBeVisible();
 	});
 
-	test('Something I need creates a needed item without quantity fields', async ({ page }) => {
+	test('inbox note can become a reviewed Note', async ({ page }) => {
 		await page.goto('/inbox');
 
-		await page.getByRole('button', { name: /^review$/i }).click();
-		await page.getByRole('button', { name: /something i need/i }).click();
-		await expect(page.getByRole('button', { name: /need to buy/i })).toHaveAttribute('aria-pressed', 'true');
-		await expect(page.getByRole('textbox', { name: 'Name' })).toBeVisible();
-		await expect(page.getByRole('textbox', { name: 'Optional note' })).toBeVisible();
+		await page.getByRole('button', { name: /create note/i }).click();
+		await page.getByRole('textbox', { name: 'Category optional' }).fill('Personal');
+		await page.getByRole('button', { name: /^save note$/i }).click();
+		await expect(page.getByText('Inbox is clear')).toBeVisible();
+
+		await page.goto('/notes');
+		await expect(page.getByText('Buy coffee').first()).toBeVisible();
+	});
+
+	test('inbox note can become a Need without quantity fields', async ({ page }) => {
+		await page.goto('/inbox');
+
+		await page.getByRole('button', { name: /create need/i }).click();
+		await expect(page.getByRole('textbox', { name: 'Title' })).toBeVisible();
+		await expect(page.getByLabel('Status')).toBeVisible();
 		await expect(page.getByLabel(/quantity/i)).toHaveCount(0);
 		await page.getByRole('button', { name: /^save need$/i }).click();
 		await expect(page.getByText('Inbox is clear')).toBeVisible();
@@ -55,6 +62,27 @@ test.describe('authenticated app smoke tests', () => {
 		await page.goto('/needs');
 		await expect(page.getByRole('heading', { name: 'What needs attention' })).toBeVisible();
 		await expect(page.locator('.need-card').filter({ hasText: 'Buy coffee' })).toContainText('Needed');
+	});
+
+	test('inbox note can become a Thing', async ({ page }) => {
+		await page.goto('/inbox');
+
+		await page.getByRole('button', { name: /create thing/i }).click();
+		await page.getByRole('textbox', { name: 'Category optional' }).fill('Groceries');
+		await page.getByRole('button', { name: /^save thing$/i }).click();
+		await expect(page.getByText('Inbox is clear')).toBeVisible();
+
+		await page.goto('/things');
+		await expect(page.getByRole('link', { name: 'Buy coffee', exact: true })).toBeVisible();
+		await expect(page.locator('article').filter({ hasText: 'Buy coffee' })).toContainText('Groceries');
+	});
+
+	test('inbox note can be dismissed', async ({ page }) => {
+		await page.goto('/inbox');
+
+		await page.getByRole('button', { name: /dismiss/i }).click();
+		await expect(page.getByText('Inbox is clear')).toBeVisible();
+		await expect(page.getByText('Nothing to review.')).toBeVisible();
 	});
 
 	test('Needs page shows low and empty items and Mark as Have removes an item', async ({ page }) => {
@@ -69,23 +97,20 @@ test.describe('authenticated app smoke tests', () => {
 		await expect(coffee).not.toBeVisible();
 	});
 
-	test('Something I measured creates a metric event and a categorized thing', async ({ page }) => {
+	test('Log Metric creates a metric event from an inbox note', async ({ page }) => {
 		await page.goto('/inbox');
 
-		await page.getByRole('button', { name: /^review$/i }).click();
-		await page.getByRole('button', { name: /something i measured/i }).click();
-		await page.getByRole('textbox', { name: 'Metric name' }).fill('Waist');
+		await page.getByRole('button', { name: /log metric/i }).click();
+		await page.getByRole('textbox', { name: 'Measurement' }).fill('Waist');
 		await page.getByRole('spinbutton', { name: 'Value' }).fill('105');
 		await page.getByRole('textbox', { name: 'Unit' }).fill('cm');
-		await page.getByRole('textbox', { name: /category for new topic optional/i }).fill('Health');
 		await expect(page.getByLabel(/quantity/i)).toHaveCount(0);
-		await page.getByRole('button', { name: /^save measurement$/i }).click();
+		await page.getByRole('button', { name: /^save metric$/i }).click();
 		await expect(page.getByText('Inbox is clear')).toBeVisible();
 
 		await page.goto('/metrics');
 		await expect(page.getByRole('heading', { name: 'Measurements' })).toBeVisible();
 		await expect(page.locator('.metric-card').filter({ hasText: 'Waist' })).toContainText('105 cm');
-		await expect(page.locator('.metric-card').filter({ hasText: 'Waist' })).toContainText('Health');
 	});
 
 	test('things page renders list view and filters by type', async ({ page }) => {

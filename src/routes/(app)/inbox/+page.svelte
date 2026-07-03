@@ -1,27 +1,22 @@
 <script lang="ts">
-	import { Activity, Archive, Boxes, Check, Ruler, Repeat, ShoppingBasket, X } from 'lucide-svelte';
+	import { Activity, Archive, Boxes, Check, FileText, Ruler, ShoppingBasket, X } from 'lucide-svelte';
 	import PendingOverlay from '$lib/components/PendingOverlay.svelte';
-	import { parseActivityDurationMinutes } from '$lib/pocketbase/activity';
-	import {
-		getBrowserPb,
-		refreshInboxCount,
-		requireUser
-	} from '$lib/pocketbase/client';
+	import { getBrowserPb, refreshInboxCount, requireUser } from '$lib/pocketbase/client';
 	import {
 		addNoteEventToNeed,
+		createActivityFromNoteEvent,
 		createMetricObservationFromNoteEvent,
-		createRoutineFromNoteEvent,
-		linkMemoryEventToThing,
-		logNoteEventAsActivity,
+		createNoteFromNoteEvent,
+		createThingFromNoteEvent,
 		markNoteEventReviewed
 	} from '$lib/pocketbase/data';
 	import { editorText, firstNonEmptyLine, formatDateTime, labelFromValue } from '$lib/pocketbase/format';
-	import { activityTypeOptions, type ActivityType } from '$lib/pocketbase/types';
 	import { beginPendingWork } from '$lib/ui/pending';
 	import type { PageData } from './$types';
 
-	type InboxAction = 'activity' | 'shopping' | 'metric' | 'memory' | 'routine';
+	type InboxAction = 'note' | 'activity' | 'need' | 'thing' | 'metric';
 	type NeedStatus = 'needed' | 'low' | 'empty';
+
 	let { data }: { data: PageData } = $props();
 
 	let removedInboxItemIds = $state<string[]>([]);
@@ -33,72 +28,46 @@
 	let savedItemId = $state<string | null>(null);
 	let hideServerSaved = $state(false);
 	let savedTimer: ReturnType<typeof setTimeout> | undefined;
-	let thingSearch = $state('');
-	let needStatus = $state<NeedStatus>('needed');
 
 	const inboxItems = $derived(
 		data.inboxItems.filter((item) => !removedInboxItemIds.includes(item.id))
 	);
-	const activeItem = $derived(inboxItems.find((item) => item.id === activeItemId) ?? null);
+
+	function textFor(event: PageData['inboxItems'][number]) {
+		return editorText(event.notes);
+	}
 
 	function titleFor(event: PageData['inboxItems'][number]) {
-		return event.title || firstNonEmptyLine(editorText(event.notes)) || 'Untitled capture';
+		return event.title || firstNonEmptyLine(textFor(event)) || 'Untitled capture';
 	}
 
-	function openReview(itemId: string) {
+	function dateTimeInputValue(value?: string | null) {
+		const date = value ? new Date(value) : new Date();
+		if (Number.isNaN(date.getTime())) return dateTimeInputValue();
+
+		const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+		return offsetDate.toISOString().slice(0, 16);
+	}
+
+	function dateTimeFromInput(value: FormDataEntryValue | null) {
+		const raw = String(value ?? '').trim();
+		if (!raw) return new Date().toISOString();
+		const date = new Date(raw);
+		if (Number.isNaN(date.getTime())) throw new Error('Choose a valid date and time.');
+		return date.toISOString();
+	}
+
+	function chooseAction(itemId: string, action: InboxAction) {
 		if (pendingItemId) return;
 		activeItemId = itemId;
-		activeAction = null;
-		thingSearch = '';
-		needStatus = 'needed';
+		activeAction = action;
+		inboxError = '';
 	}
 
-	function closeReview() {
+	function closeInlineReview() {
 		activeItemId = null;
 		activeAction = null;
-		thingSearch = '';
-		needStatus = 'needed';
-	}
-
-	function chooseMeaning(action: InboxAction) {
-		if (pendingItemId) return;
-		activeAction = action;
-		thingSearch = '';
-		needStatus = 'needed';
-	}
-
-	function backToMeaning() {
-		activeAction = null;
-		thingSearch = '';
-		needStatus = 'needed';
-	}
-
-	function needChoiceLabel(status: NeedStatus) {
-		if (status === 'low') return 'Running low';
-		if (status === 'empty') return 'Out of stock';
-		return 'Need to buy';
-	}
-
-	function filteredThings() {
-		const query = thingSearch.trim().toLowerCase();
-		const things = query
-			? data.things.filter((thing) =>
-					`${thing.name} ${thing.type} ${thing.status ?? ''} ${thing.category ?? ''}`.toLowerCase().includes(query)
-				)
-			: data.things;
-
-		return things.slice(0, 40);
-	}
-
-	function thingOptionLabel(thing: PageData['things'][number]) {
-		return [
-			thing.name,
-			thing.category,
-			labelFromValue(thing.type),
-			thing.status ? labelFromValue(thing.status) : ''
-		]
-			.filter(Boolean)
-			.join(' · ');
+		inboxError = '';
 	}
 
 	function flashSaved(eventId: string) {
@@ -136,7 +105,7 @@
 
 		try {
 			await mutation(formData, eventId);
-			closeReview();
+			closeInlineReview();
 			removedInboxItemIds = [...removedInboxItemIds, eventId];
 			flashSaved(eventId);
 			refreshInboxCount();
@@ -153,100 +122,91 @@
 		await markNoteEventReviewed(getBrowserPb(), user.id, eventId, { dismissed: true });
 	}
 
-	async function maybeLinkTopic(formData: FormData, eventId: string) {
-		const thingId = String(formData.get('thing_id') ?? '').trim();
-		if (!thingId) return false;
+	async function saveNote(formData: FormData, eventId: string) {
+		const title = String(formData.get('title') ?? '').trim();
+		const body = String(formData.get('body') ?? '').trim();
+		const category = String(formData.get('category') ?? '').trim();
+		if (!title) throw new Error('Title is required.');
 
 		const user = await requireUser();
-		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, thingId);
-		return true;
+		await createNoteFromNoteEvent(getBrowserPb(), user.id, eventId, {
+			title,
+			notes: body,
+			...(category ? { category } : {})
+		});
 	}
 
-	async function rememberNote(formData: FormData, eventId: string) {
-		if (await maybeLinkTopic(formData, eventId)) return;
+	async function saveActivity(formData: FormData, eventId: string) {
+		const title = String(formData.get('title') ?? '').trim();
+		const notes = String(formData.get('notes') ?? '').trim();
+		const category = String(formData.get('category') ?? '').trim();
+		if (!title) throw new Error('Title is required.');
 
 		const user = await requireUser();
-		await markNoteEventReviewed(getBrowserPb(), user.id, eventId);
-	}
-
-	async function createRoutine(formData: FormData, eventId: string) {
-		const routineName = String(formData.get('routine_name') ?? '').trim();
-		const intervalValue = String(formData.get('interval_days') ?? '').trim();
-		const intervalDays = Number(intervalValue);
-
-		if (!routineName) throw new Error('Routine name is required.');
-		if (!intervalValue) throw new Error('Interval days is required.');
-		if (!Number.isInteger(intervalDays) || intervalDays <= 0) {
-			throw new Error('Interval days must be a positive whole number.');
-		}
-
-		const user = await requireUser();
-		const result = await createRoutineFromNoteEvent(getBrowserPb(), user.id, eventId, intervalDays, routineName);
-		const topicId = String(formData.get('thing_id') ?? '').trim() || result.thing.id;
-		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, topicId);
+		await createActivityFromNoteEvent(getBrowserPb(), user.id, eventId, {
+			title,
+			happened_at: dateTimeFromInput(formData.get('happened_at')),
+			...(category ? { category } : {}),
+			...(notes ? { notes } : {})
+		});
 	}
 
 	async function saveNeed(formData: FormData, eventId: string) {
-		const itemName = String(formData.get('item_name') ?? '').trim();
+		const title = String(formData.get('title') ?? '').trim();
+		const category = String(formData.get('category') ?? '').trim();
 		const notes = String(formData.get('notes') ?? '').trim();
-		const statusValue = String(formData.get('need_status') ?? 'needed') as NeedStatus;
-		if (!itemName) throw new Error('Item name is required.');
-		if (!['needed', 'low', 'empty'].includes(statusValue)) throw new Error('Choose a need state.');
+		const status = String(formData.get('status') ?? 'needed') as NeedStatus;
+		if (!title) throw new Error('Title is required.');
+		if (!['needed', 'low', 'empty'].includes(status)) throw new Error('Choose a valid need status.');
 
 		const user = await requireUser();
-		const selectedTopicId = String(formData.get('thing_id') ?? '').trim();
-		const thing = await addNoteEventToNeed(getBrowserPb(), user.id, eventId, {
-			name: itemName,
-			status: statusValue,
-			...(notes ? { notes } : {}),
-			...(selectedTopicId ? { topicId: selectedTopicId } : {})
+		await addNoteEventToNeed(getBrowserPb(), user.id, eventId, {
+			name: title,
+			status,
+			...(category ? { category } : {}),
+			...(notes ? { notes } : {})
 		});
-		const topicId = selectedTopicId || thing.id;
-		await linkMemoryEventToThing(getBrowserPb(), user.id, eventId, topicId);
+	}
+
+	async function saveThing(formData: FormData, eventId: string) {
+		const name = String(formData.get('name') ?? '').trim();
+		const category = String(formData.get('category') ?? '').trim();
+		const notes = String(formData.get('notes') ?? '').trim();
+		if (!name) throw new Error('Name is required.');
+
+		const user = await requireUser();
+		await createThingFromNoteEvent(
+			getBrowserPb(),
+			user.id,
+			eventId,
+			'other',
+			'unknown',
+			category,
+			name,
+			notes
+		);
 	}
 
 	async function saveMetric(formData: FormData, eventId: string) {
 		const existingThingId = String(formData.get('thing_id') ?? '').trim();
-		const metricName = String(formData.get('metric_name') ?? '').trim();
-		const value = Number(String(formData.get('metric_value') ?? '').trim());
-		const unit = String(formData.get('metric_unit') ?? '').trim();
+		const measurement = String(formData.get('measurement') ?? '').trim();
+		const value = Number(String(formData.get('value') ?? '').trim());
+		const unit = String(formData.get('unit') ?? '').trim();
 		const notes = String(formData.get('notes') ?? '').trim();
-		const category = String(formData.get('category') ?? '').trim();
 
-		if (!existingThingId && !metricName) throw new Error('Metric name is required.');
+		if (!measurement) throw new Error('Measurement is required.');
 		if (!Number.isFinite(value)) throw new Error('Value must be a valid number.');
 		if (!unit) throw new Error('Unit is required.');
 
 		const user = await requireUser();
 		await createMetricObservationFromNoteEvent(getBrowserPb(), user.id, eventId, {
-			...(existingThingId ? { thingId: existingThingId } : { thingName: metricName }),
+			...(existingThingId ? { thingId: existingThingId } : { thingName: measurement }),
 			value,
 			unit,
-			label: metricName,
-			...(notes ? { notes } : {}),
-			...(category ? { category } : {})
-		});
-	}
-
-	async function logActivity(formData: FormData, eventId: string) {
-		const activityTypeValue = String(formData.get('activity_type') ?? 'other');
-		if (!activityTypeOptions.includes(activityTypeValue as ActivityType)) {
-			throw new Error('Choose a valid activity type.');
-		}
-
-		const parsedDuration = parseActivityDurationMinutes(formData.get('duration_minutes'));
-		if (parsedDuration.error) {
-			throw new Error(parsedDuration.error);
-		}
-
-		const notes = String(formData.get('notes') ?? '').trim();
-		const user = await requireUser();
-		await logNoteEventAsActivity(getBrowserPb(), user.id, eventId, {
-			activity_type: activityTypeValue as ActivityType,
-			duration_minutes: parsedDuration.minutes!,
+			label: measurement,
+			happened_at: dateTimeFromInput(formData.get('happened_at')),
 			...(notes ? { notes } : {})
 		});
-		await maybeLinkTopic(formData, eventId);
 	}
 </script>
 
@@ -257,9 +217,9 @@
 <section class="page-header">
 	<div>
 		<p class="eyebrow">Inbox</p>
-		<h1>Capture triage</h1>
+		<h1>Review</h1>
 	</div>
-	<p>Review quick notes and decide what they are.</p>
+	<p>Turn quick captures into useful records, dismiss them, or leave them for later.</p>
 </section>
 
 {#if inboxError}
@@ -282,19 +242,206 @@
 					<time datetime={item.happened_at || item.created}>{formatDateTime(item.happened_at || item.created)}</time>
 				</div>
 
-				{#if editorText(item.notes)}
-					<p class="plain-note">{editorText(item.notes)}</p>
+				{#if textFor(item)}
+					<p class="plain-note">{textFor(item)}</p>
 				{/if}
 
 				{#if savedItemId === item.id && !hideServerSaved}
 					<p class="notice success">Saved</p>
 				{/if}
 
-				<div class="inbox-card-actions">
-					<button class="primary-action compact" type="button" onclick={() => openReview(item.id)} disabled={Boolean(pendingItemId)}>
-						Review
+				<div class="inbox-card-actions review-action-row">
+					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'note')} disabled={Boolean(pendingItemId)}>
+						<FileText size={16} />
+						Create Note
+					</button>
+					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'activity')} disabled={Boolean(pendingItemId)}>
+						<Activity size={16} />
+						Create Activity
+					</button>
+					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'need')} disabled={Boolean(pendingItemId)}>
+						<ShoppingBasket size={16} />
+						Create Need
+					</button>
+					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'thing')} disabled={Boolean(pendingItemId)}>
+						<Boxes size={16} />
+						Create Thing
+					</button>
+					<button class="secondary-action compact" type="button" onclick={() => chooseAction(item.id, 'metric')} disabled={Boolean(pendingItemId)}>
+						<Ruler size={16} />
+						Log Metric
+					</button>
+					<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Dismissing...', dismissNote)}>
+						<input type="hidden" name="event_id" value={item.id} />
+						<button class="ghost-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+							<X size={16} />
+							Dismiss
+						</button>
+					</form>
+					<button class="ghost-action compact" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>
+						Later
 					</button>
 				</div>
+
+				{#if activeItemId === item.id && activeAction}
+					<div class="inbox-inline-review">
+						{#if activeAction === 'note'}
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating note...', saveNote)}>
+								<input type="hidden" name="event_id" value={item.id} />
+								<div class="inbox-form-grid">
+									<label>
+										Title
+										<input name="title" value={titleFor(item)} required autocomplete="off" />
+									</label>
+									<label>
+										Category optional
+										<input name="category" autocomplete="off" />
+									</label>
+									<label class="wide-field">
+										Body
+										<textarea name="body" rows="4">{textFor(item)}</textarea>
+									</label>
+								</div>
+								<div class="inbox-form-actions">
+									<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+										<Check size={16} />
+										Save note
+									</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+								</div>
+							</form>
+						{:else if activeAction === 'activity'}
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating activity...', saveActivity)}>
+								<input type="hidden" name="event_id" value={item.id} />
+								<div class="inbox-form-grid">
+									<label>
+										Title
+										<input name="title" value={titleFor(item)} required autocomplete="off" />
+									</label>
+									<label>
+										Date and time
+										<input name="happened_at" type="datetime-local" value={dateTimeInputValue(item.happened_at || item.created)} required />
+									</label>
+									<label>
+										Category optional
+										<input name="category" autocomplete="off" />
+									</label>
+									<label class="wide-field">
+										Notes
+										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+									</label>
+								</div>
+								<div class="inbox-form-actions">
+									<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+										<Check size={16} />
+										Save activity
+									</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+								</div>
+							</form>
+						{:else if activeAction === 'need'}
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating need...', saveNeed)}>
+								<input type="hidden" name="event_id" value={item.id} />
+								<div class="inbox-form-grid">
+									<label>
+										Title
+										<input name="title" value={titleFor(item)} required autocomplete="off" />
+									</label>
+									<label>
+										Status
+										<select name="status">
+											<option value="needed">Need to buy</option>
+											<option value="low">Running low</option>
+											<option value="empty">Out of stock</option>
+										</select>
+									</label>
+									<label>
+										Category optional
+										<input name="category" autocomplete="off" />
+									</label>
+									<label class="wide-field">
+										Notes
+										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+									</label>
+								</div>
+								<div class="inbox-form-actions">
+									<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+										<Check size={16} />
+										Save need
+									</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+								</div>
+							</form>
+						{:else if activeAction === 'thing'}
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating thing...', saveThing)}>
+								<input type="hidden" name="event_id" value={item.id} />
+								<div class="inbox-form-grid">
+									<label>
+										Name
+										<input name="name" value={titleFor(item)} required autocomplete="off" />
+									</label>
+									<label>
+										Category optional
+										<input name="category" autocomplete="off" />
+									</label>
+									<label class="wide-field">
+										Notes
+										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+									</label>
+								</div>
+								<div class="inbox-form-actions">
+									<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+										<Check size={16} />
+										Save thing
+									</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+								</div>
+							</form>
+						{:else if activeAction === 'metric'}
+							<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Logging metric...', saveMetric)}>
+								<input type="hidden" name="event_id" value={item.id} />
+								<div class="inbox-form-grid">
+									<label>
+										Measurement
+										<input name="measurement" value={titleFor(item)} required autocomplete="off" />
+									</label>
+									<label>
+										Value
+										<input name="value" type="number" step="any" required />
+									</label>
+									<label>
+										Unit
+										<input name="unit" placeholder="kg, cm, cans..." autocomplete="off" required />
+									</label>
+									<label>
+										Date and time
+										<input name="happened_at" type="datetime-local" value={dateTimeInputValue(item.happened_at || item.created)} required />
+									</label>
+									<label class="wide-field">
+										Thing optional
+										<select name="thing_id">
+											<option value="">Create a new measurement topic</option>
+											{#each data.things as thing}
+												<option value={thing.id}>{thing.name}{thing.category ? ` · ${thing.category}` : ''}</option>
+											{/each}
+										</select>
+									</label>
+									<label class="wide-field">
+										Notes
+										<textarea name="notes" rows="3">{textFor(item)}</textarea>
+									</label>
+								</div>
+								<div class="inbox-form-actions">
+									<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
+										<Check size={16} />
+										Save metric
+									</button>
+									<button class="ghost-action" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>Later</button>
+								</div>
+							</form>
+						{/if}
+					</div>
+				{/if}
 			</article>
 		{/each}
 	</section>
@@ -303,255 +450,7 @@
 		<span class="soft-icon"><Archive size={20} /></span>
 		<div>
 			<h2>Inbox is clear</h2>
-			<p class="empty-state">Unreviewed Quick Capture notes will appear here.</p>
+			<p class="empty-state">Nothing to review.</p>
 		</div>
 	</section>
-{/if}
-
-{#if activeItem}
-	<div class="review-modal-backdrop" role="presentation">
-		<div class="review-modal pending-region" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
-			<PendingOverlay active={pendingItemId === activeItem.id} message={pendingMessage} />
-			<div class="review-modal-header">
-				<div>
-					<p class="eyebrow">Review quick note</p>
-					<h2 id="review-modal-title">{titleFor(activeItem)}</h2>
-				</div>
-				<button class="icon-button" type="button" onclick={closeReview} aria-label="Cancel review" disabled={Boolean(pendingItemId)}>
-					<X size={18} />
-				</button>
-			</div>
-
-			<div class="review-note-preview">
-				<time datetime={activeItem.happened_at || activeItem.created}>{formatDateTime(activeItem.happened_at || activeItem.created)}</time>
-				{#if editorText(activeItem.notes)}
-					<p>{editorText(activeItem.notes)}</p>
-				{/if}
-			</div>
-
-			{#if activeAction === null}
-				<div class="inbox-triage">
-					<p class="inbox-question">What is this?</p>
-					<div class="inbox-choice-grid meaning-choice-grid">
-						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('activity')} disabled={Boolean(pendingItemId)}>
-							<Activity size={16} />
-							Something I did
-						</button>
-						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('shopping')} disabled={Boolean(pendingItemId)}>
-							<ShoppingBasket size={16} />
-							Something I need
-						</button>
-						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('metric')} disabled={Boolean(pendingItemId)}>
-							<Ruler size={16} />
-							Something I measured
-						</button>
-						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('memory')} disabled={Boolean(pendingItemId)}>
-							<Boxes size={16} />
-							Something worth remembering
-						</button>
-						<button class="secondary-action inbox-choice-button" type="button" onclick={() => chooseMeaning('routine')} disabled={Boolean(pendingItemId)}>
-							<Repeat size={16} />
-							Something recurring
-						</button>
-						<form method="POST" class="inbox-direct-form" onsubmit={(event) => runInboxAction(event, 'Dismissing...', dismissNote)}>
-							<input type="hidden" name="event_id" value={activeItem.id} />
-							<button class="secondary-action inbox-choice-button" type="submit" disabled={Boolean(pendingItemId)}>
-								<X size={16} />
-								Nothing important
-							</button>
-						</form>
-					</div>
-					<div class="inbox-form-actions">
-						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
-					</div>
-				</div>
-			{:else if activeAction === 'activity'}
-				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving activity...', logActivity)}>
-					<input type="hidden" name="event_id" value={activeItem.id} />
-					<div class="inbox-form-grid">
-						<label>
-							Activity type
-							<select name="activity_type">
-								{#each activityTypeOptions as type}
-									<option value={type}>{labelFromValue(type)}</option>
-								{/each}
-							</select>
-						</label>
-						<label>
-							Duration
-							<input name="duration_minutes" type="number" min="1" step="1" placeholder="30" required />
-						</label>
-						<label class="wide-field">
-							Link to topic optional
-							<select name="thing_id">
-								<option value="">No topic link</option>
-								{#each filteredThings() as thing}
-									<option value={thing.id}>{thingOptionLabel(thing)}</option>
-								{/each}
-							</select>
-						</label>
-					</div>
-					<div class="inbox-form-actions">
-						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-							<Activity size={16} />
-							Save activity
-						</button>
-						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
-						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
-					</div>
-				</form>
-			{:else if activeAction === 'shopping'}
-				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving need...', saveNeed)}>
-					<input type="hidden" name="event_id" value={activeItem.id} />
-					<input type="hidden" name="need_status" value={needStatus} />
-					<div class="inbox-form-grid">
-						<div class="wide-field inbox-choice-grid need-choice-grid" aria-label="Need state">
-							{#each ['needed', 'low', 'empty'] as status}
-								<button
-									class:active={needStatus === status}
-									class="secondary-action inbox-choice-button"
-									type="button"
-									aria-pressed={needStatus === status}
-									onclick={() => (needStatus = status as NeedStatus)}
-									disabled={Boolean(pendingItemId)}
-								>
-									{needChoiceLabel(status as NeedStatus)}
-								</button>
-							{/each}
-						</div>
-						<label>
-							Name
-							<input name="item_name" value={titleFor(activeItem)} required />
-						</label>
-						<label>
-							Optional note
-							<input name="notes" value={editorText(activeItem.notes)} autocomplete="off" />
-						</label>
-						<label class="wide-field">
-							Link to topic optional
-							<select name="thing_id">
-								<option value="">Use this need as topic</option>
-								{#each filteredThings() as thing}
-									<option value={thing.id}>{thingOptionLabel(thing)}</option>
-								{/each}
-							</select>
-						</label>
-					</div>
-					<div class="inbox-form-actions">
-						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-							<ShoppingBasket size={16} />
-							Save need
-						</button>
-						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
-						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
-					</div>
-				</form>
-			{:else if activeAction === 'metric'}
-				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving measurement...', saveMetric)}>
-					<input type="hidden" name="event_id" value={activeItem.id} />
-					<div class="inbox-form-grid">
-						<label class="wide-field">
-							Link to existing topic optional
-							<select name="thing_id">
-								<option value="">Create a new topic</option>
-								{#each filteredThings() as thing}
-									<option value={thing.id}>{thingOptionLabel(thing)}</option>
-								{/each}
-							</select>
-						</label>
-						<label>
-							Metric name
-							<input name="metric_name" value={titleFor(activeItem)} autocomplete="off" />
-						</label>
-						<label>
-							Value
-							<input name="metric_value" type="number" step="any" required />
-						</label>
-						<label>
-							Unit
-							<input name="metric_unit" placeholder="kg, cm, cans..." autocomplete="off" required />
-						</label>
-						<label>
-							Category for new topic optional
-							<input name="category" placeholder="Health, Groceries..." autocomplete="off" />
-						</label>
-						<label class="wide-field">
-							Optional note
-							<input name="notes" value={editorText(activeItem.notes)} autocomplete="off" />
-						</label>
-					</div>
-					<div class="inbox-form-actions">
-						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-							<Ruler size={16} />
-							Save measurement
-						</button>
-						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
-						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
-					</div>
-				</form>
-			{:else if activeAction === 'memory'}
-				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Saving memory...', rememberNote)}>
-					<input type="hidden" name="event_id" value={activeItem.id} />
-					<div class="inbox-form-grid">
-						{#if data.things.length}
-							<label class="wide-field">
-								Search topics
-								<input type="search" bind:value={thingSearch} placeholder="Type to narrow topics" autocomplete="off" />
-							</label>
-							<label class="wide-field">
-								Link to existing topic optional
-								<select name="thing_id">
-									<option value="">Just mark as reviewed</option>
-									{#each filteredThings() as thing}
-										<option value={thing.id}>{thingOptionLabel(thing)}</option>
-									{/each}
-								</select>
-							</label>
-						{:else}
-							<p class="empty-state wide-field">No topics are available yet. You can still mark this note as reviewed.</p>
-						{/if}
-					</div>
-					<div class="inbox-form-actions">
-						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-							<Check size={16} />
-							Save memory
-						</button>
-						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
-						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
-					</div>
-				</form>
-			{:else if activeAction === 'routine'}
-				<form method="POST" class="inbox-action-panel" onsubmit={(event) => runInboxAction(event, 'Creating routine...', createRoutine)}>
-					<input type="hidden" name="event_id" value={activeItem.id} />
-					<div class="inbox-form-grid">
-						<label>
-							Routine name
-							<input name="routine_name" value={titleFor(activeItem)} required />
-						</label>
-						<label>
-							Repeat every N days
-							<input name="interval_days" type="number" min="1" step="1" placeholder="7" required />
-						</label>
-						<label class="wide-field">
-							Link to topic optional
-							<select name="thing_id">
-								<option value="">Use the recurring topic</option>
-								{#each filteredThings() as thing}
-									<option value={thing.id}>{thingOptionLabel(thing)}</option>
-								{/each}
-							</select>
-						</label>
-					</div>
-					<div class="inbox-form-actions">
-						<button class="primary-action compact" type="submit" disabled={Boolean(pendingItemId)}>
-							<Repeat size={16} />
-							Create routine
-						</button>
-						<button class="ghost-action" type="button" onclick={backToMeaning} disabled={Boolean(pendingItemId)}>Back</button>
-						<button class="ghost-action" type="button" onclick={closeReview} disabled={Boolean(pendingItemId)}>Cancel</button>
-					</div>
-				</form>
-			{/if}
-		</div>
-	</div>
 {/if}

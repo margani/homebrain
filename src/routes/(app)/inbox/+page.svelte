@@ -251,7 +251,7 @@
 		<p class="eyebrow">Inbox</p>
 		<h1>Review</h1>
 	</div>
-	<p>Turn quick captures into useful records, dismiss them, or leave them for later.</p>
+	<p>Turn quick captures into useful records, or dismiss the ones you no longer need.</p>
 </section>
 
 {#if inboxError}
@@ -318,11 +318,6 @@
 								Dismiss
 							</button>
 						</form>
-						{#if !(activeItemId === item.id && activeAction)}
-							<button class="ghost-action compact" type="button" onclick={closeInlineReview} disabled={Boolean(pendingItemId)}>
-								Later
-							</button>
-						{/if}
 					</div>
 				</div>
 

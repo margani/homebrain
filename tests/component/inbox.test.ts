@@ -54,7 +54,7 @@ describe('Inbox card', () => {
 		expect(screen.getByRole('button', { name: /create thing/i })).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /log metric/i })).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^later$/i })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^later$/i })).not.toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: /^save note$/i })).not.toBeInTheDocument();
 	});
 
@@ -104,11 +104,9 @@ describe('Inbox card', () => {
 		expect(screen.getByText('Buy coffee')).toBeInTheDocument();
 	});
 
-	it('action-row Later is hidden while an inline form is open', async () => {
+	it('does not show Later while an inline form is open', async () => {
 		const user = userEvent.setup();
 		renderInbox();
-
-		expect(screen.getByRole('button', { name: /^later$/i })).toBeInTheDocument();
 
 		await user.click(screen.getByRole('button', { name: /create activity/i }));
 		expect(screen.getByText('Creating Activity')).toBeInTheDocument();
